@@ -162,9 +162,9 @@
     },
     {
       "parameters": {
-        "toolDescription": "Lit l'etat de la maison dans Home Assistant en evaluant un template Jinja (lecture seule, ne change rien). Exemples : \"{{ states('sensor.temperature_salon') }}\", \"{{ states.light | selectattr('state','eq','on') | map(attribute='name') | list }}\".",
+        "toolDescription": "Parle a Home Assistant en langage naturel (Assist), en francais : lire un etat (\"quelle est la temperature du salon ?\", \"quelles lumieres sont allumees ?\") ou commander un appareil (\"eteins la lumiere du salon\"). Seuls les appareils que Louis a exposes a Assist sont accessibles. Pour une commande, demander confirmation a Louis avant.",
         "method": "POST",
-        "url": "@@HA_URL@@/api/template",
+        "url": "@@HA_URL@@/api/conversation/process",
         "options": {
           "timeout": 20000
         },
@@ -172,10 +172,10 @@
         "genericAuthType": "httpHeaderAuth",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ template: $fromAI('template', `Template Jinja Home Assistant a evaluer`, 'string') }) }}"
+        "jsonBody": "={{ JSON.stringify({ text: $fromAI('phrase', `Phrase en francais pour Home Assistant`, 'string'), language: 'fr' }) }}"
       },
-      "id": "outil-maison_lecture",
-      "name": "maison_lecture",
+      "id": "outil-maison",
+      "name": "maison",
       "type": "n8n-nodes-base.httpRequestTool",
       "typeVersion": 4.2,
       "position": [
@@ -332,7 +332,7 @@
         ]
       ]
     },
-    "maison_lecture": {
+    "maison": {
       "ai_tool": [
         [
           {

@@ -138,13 +138,14 @@ outils = [
         ],
     ),
     outil_http(
-        "maison_lecture", [400, 300],
-        "Lit l'etat de la maison dans Home Assistant en evaluant un template Jinja "
-        "(lecture seule, ne change rien). Exemples : "
-        "\"{{ states('sensor.temperature_salon') }}\", "
-        "\"{{ states.light | selectattr('state','eq','on') | map(attribute='name') | list }}\".",
-        "POST", "@@HA_URL@@/api/template", cle_cred="ha",
-        corps="={{ JSON.stringify({ template: $fromAI('template', `Template Jinja Home Assistant a evaluer`, 'string') }) }}",
+        "maison", [400, 300],
+        "Parle a Home Assistant en langage naturel (Assist), en francais : lire un etat "
+        "(\"quelle est la temperature du salon ?\", \"quelles lumieres sont allumees ?\") "
+        "ou commander un appareil (\"eteins la lumiere du salon\"). Seuls les appareils que "
+        "Louis a exposes a Assist sont accessibles. Pour une commande, demander confirmation "
+        "a Louis avant.",
+        "POST", "@@HA_URL@@/api/conversation/process", cle_cred="ha",
+        corps="={{ JSON.stringify({ text: $fromAI('phrase', `Phrase en francais pour Home Assistant`, 'string'), language: 'fr' }) }}",
     ),
     outil_http(
         "maison_script", [600, 300],

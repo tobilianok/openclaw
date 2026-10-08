@@ -27,7 +27,7 @@ vraies valeurs dans les réponses. Rien ne tourne sur ton PC.
                     n8n (VM Docker .14)                   Gemini · Mistral · NVIDIA NIM
                     ├─ Prometheus / Alertmanager (.19)    Groq · GitHub Models · OpenRouter
                     ├─ Agenda Nextcloud
-                    ├─ Home Assistant (.21) : lecture + scripts autorisés
+                    ├─ Home Assistant (.21) : via Assist (appareils exposés)
                     ├─ Seerr (films)
                     ├─ Paperless (lecture)
                     └─ crons : briefing 7 h, bilan 21 h ──▶ /hooks/agent
@@ -175,7 +175,7 @@ augmente les quotas, et il suffit de laisser une clé vide pour le désactiver.
 | Où | Quoi |
 |---|---|
 | Nextcloud | Utilisateur `majordome`. Partage-lui ton agenda **en lecture seule**, puis crée-lui un mot de passe d'application. |
-| Home Assistant | Utilisateur `majordome` (non admin), avec un jeton longue durée. Crée les scripts que tu autorises, par exemple `script.majordome_tout_eteindre`. |
+| Home Assistant | Utilisateur `majordome` (non admin), avec un jeton longue durée. **Expose à Assist** les appareils que le majordome peut voir et piloter (Paramètres → Assistants vocaux → Exposer). Facultatif : des scripts autorisés, par exemple `script.majordome_tout_eteindre`. |
 | Paperless | Utilisateur en **lecture seule**, avec son jeton d'API |
 | Seerr | Paramètres > Général > Clé API |
 
