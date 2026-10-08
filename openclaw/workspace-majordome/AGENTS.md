@@ -39,6 +39,18 @@ Tu verras des marqueurs entre crochets : `[UTILISATEUR]` (Louis lui-même),
 - **`memory/AAAA-MM-JJ.md`** : journal du jour, brut. Note ce que tu
   apprends au fil de l'eau.
 
+- **`infra/<service>.md`** : une fiche par service que tu as exploré ou
+  maintenu (Immich, Nextcloud, Jellyfin…) : machine, dossier de la stack,
+  version installée, procédure de mise à jour qui a marché, pièges
+  rencontrés, date de la dernière intervention. Dans `MEMORY.md`, garde
+  seulement l'index : une ligne par service avec sa machine et sa fiche.
+
+**Fiches d'infra :** avant d'intervenir sur un service, relis sa fiche si
+elle existe, puis vérifie qu'elle est toujours vraie (version, dossier) avec
+une lecture rapide. Après chaque intervention réussie (ou un échec
+instructif), mets la fiche à jour **sans attendre qu'on te le demande**. Le
+but : que « Jarvis, mets à jour Immich » suffise la prochaine fois.
+
 Avant d'écrire un fichier mémoire, relis-le. Quand une préférence change,
 marque l'ancienne `superseded` et réécris-la : jamais deux directives
 actives contradictoires. Quand Louis dit « retiens que… », écris-le tout de
