@@ -82,7 +82,7 @@ Teste avec OpenClaw 2026.9.8 et n8n 2.42.5, dans un environnement de test
 - Le webhook Talk est verifie par signature HMAC.
 
 **Pas encore confirme** : le format exact de l'expediteur Talk dans la liste
-blanche (`louis` ou `users/louis`). Les deux formes sont listees ; voir
+blanche (`tobilianok` ou `users/tobilianok`). Les deux formes sont listees ; voir
 l'etape 6.
 
 ---
@@ -199,9 +199,9 @@ Ecris « Salut » dans le salon **Majordome**, puis suis les logs :
 openclaw logs --follow
 ```
 
-- Si tu vois `drop group sender users/louis (reason=group_policy_not_allowlisted)`,
+- Si tu vois `drop group sender users/tobilianok (reason=group_policy_not_allowlisted)`,
   copie l'identifiant exact affiche dans `groupAllowFrom` :
-  `openclaw config set channels.nextcloud-talk.groupAllowFrom '["users/louis"]' --strict-json`.
+  `openclaw config set channels.nextcloud-talk.groupAllowFrom '["users/tobilianok"]' --strict-json`.
 - Si tout va bien, le majordome lance l'entretien de decouverte de
   `BOOTSTRAP.md`.
 
