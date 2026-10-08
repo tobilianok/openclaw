@@ -1,0 +1,138 @@
+{
+  "id": "majRythme0000001",
+  "name": "Majordome - briefing et bilan",
+  "active": false,
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 7 * * *"
+            }
+          ]
+        }
+      },
+      "id": "trigger-Chaque matin 7h",
+      "name": "Chaque matin 7h",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "@@OPENCLAW_URL@@/hooks/agent",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBearerAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{\n  \"message\": \"C'est l'heure du briefing du matin de Louis. Utilise tes outils : agenda (aujourd'hui et demain), meteo (1 jour), infra_alertes. Ecris un message court en francais : la journee (rendez-vous avec heures), la meteo en une ligne (et s'il faut un parapluie), puis l'infra seulement si une alerte est active. Ajoute au plus une remarque utile tiree de ce que tu sais de Louis. Pas de titre, pas de formule de politesse.\",\n  \"name\": \"Briefing du matin\",\n  \"agentId\": \"majordome\",\n  \"channel\": \"nextcloud-talk\",\n  \"to\": \"room:@@TALK_ROOM_MAJORDOME@@\"\n}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "appel-Briefing du matin",
+      "name": "Briefing du matin",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        300,
+        0
+      ],
+      "credentials": {
+        "httpBearerAuth": {
+          "id": "majCredOcHooks001",
+          "name": "Majordome - hooks OpenClaw"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 21 * * *"
+            }
+          ]
+        }
+      },
+      "id": "trigger-Chaque soir 21h",
+      "name": "Chaque soir 21h",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        250
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "@@OPENCLAW_URL@@/hooks/agent",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBearerAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{\n  \"message\": \"C'est l'heure du bilan du soir. Relis ta note du jour dans memory/, mets a jour USER.md et MEMORY.md avec ce que tu as appris aujourd'hui (rien de sensible). Puis envoie a Louis un message tres court : ce qui l'attend demain (agenda) et, seulement s'il y en a, une alerte infra ou un point en suspens. S'il n'y a rien a signaler, dis-le en une ligne.\",\n  \"name\": \"Bilan du soir\",\n  \"agentId\": \"majordome\",\n  \"channel\": \"nextcloud-talk\",\n  \"to\": \"room:@@TALK_ROOM_MAJORDOME@@\"\n}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "appel-Bilan du soir",
+      "name": "Bilan du soir",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        300,
+        250
+      ],
+      "credentials": {
+        "httpBearerAuth": {
+          "id": "majCredOcHooks001",
+          "name": "Majordome - hooks OpenClaw"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    }
+  ],
+  "connections": {
+    "Chaque matin 7h": {
+      "main": [
+        [
+          {
+            "node": "Briefing du matin",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Chaque soir 21h": {
+      "main": [
+        [
+          {
+            "node": "Bilan du soir",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Europe/Paris"
+  },
+  "tags": []
+}

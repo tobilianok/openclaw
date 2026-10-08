@@ -1,0 +1,136 @@
+{
+  "id": "majSensibleMcp01",
+  "name": "Majordome - sensible (MCP)",
+  "active": false,
+  "nodes": [
+    {
+      "parameters": {
+        "authentication": "bearerAuth",
+        "path": "majordome-sensible",
+        "instructions": "Outils sensibles du majordome de Louis (documents administratifs). Reserve a l'agent local."
+      },
+      "id": "mcp-trigger",
+      "name": "MCP Server Trigger",
+      "type": "@n8n/n8n-nodes-langchain.mcpTrigger",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        0
+      ],
+      "webhookId": "majordome-sensible-0000-4000-8000-majordome",
+      "credentials": {
+        "httpBearerAuth": {
+          "id": "majCredMcpBearer",
+          "name": "Majordome - jeton MCP"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "toolDescription": "Recherche plein texte dans les documents Paperless de Louis (factures, impots, banque, sante...). Renvoie id, titre, date, correspondant, type.",
+        "method": "GET",
+        "url": "@@PAPERLESS_URL@@/api/documents/",
+        "options": {
+          "timeout": 20000
+        },
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "query",
+              "value": "={{ $fromAI('recherche', `Mots-cles de recherche`, 'string') }}"
+            },
+            {
+              "name": "page_size",
+              "value": "10"
+            },
+            {
+              "name": "fields",
+              "value": "id,title,created,correspondent,document_type,tags"
+            }
+          ]
+        }
+      },
+      "id": "outil-paperless_recherche",
+      "name": "paperless_recherche",
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.2,
+      "position": [
+        -100,
+        300
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "majCredPaperless1",
+          "name": "Majordome - Paperless (lecture)"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "toolDescription": "Lit le texte (OCR) d'un document Paperless a partir de son id (obtenu avec paperless_recherche).",
+        "method": "GET",
+        "url": "=@@PAPERLESS_URL@@/api/documents/{{ $fromAI('id', `Identifiant du document`, 'number') }}/",
+        "options": {
+          "timeout": 20000
+        },
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "fields",
+              "value": "id,title,created,correspondent,document_type,content"
+            }
+          ]
+        }
+      },
+      "id": "outil-paperless_document",
+      "name": "paperless_document",
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.2,
+      "position": [
+        100,
+        300
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "majCredPaperless1",
+          "name": "Majordome - Paperless (lecture)"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "paperless_recherche": {
+      "ai_tool": [
+        [
+          {
+            "node": "MCP Server Trigger",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "paperless_document": {
+      "ai_tool": [
+        [
+          {
+            "node": "MCP Server Trigger",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataSuccessExecution": "all"
+  },
+  "tags": []
+}

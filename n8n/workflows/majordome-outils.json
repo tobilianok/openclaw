@@ -1,0 +1,385 @@
+{
+  "id": "majOutilsMcp0001",
+  "name": "Majordome - outils (MCP)",
+  "active": false,
+  "nodes": [
+    {
+      "parameters": {
+        "authentication": "bearerAuth",
+        "path": "majordome-outils",
+        "instructions": "Outils du quotidien du majordome de Louis : infra, agenda, meteo, maison, films. Aucune donnee sensible."
+      },
+      "id": "mcp-trigger",
+      "name": "MCP Server Trigger",
+      "type": "@n8n/n8n-nodes-langchain.mcpTrigger",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        0
+      ],
+      "webhookId": "majordome-outils-0000-4000-8000-majordome",
+      "credentials": {
+        "httpBearerAuth": {
+          "id": "majCredMcpBearer",
+          "name": "Majordome - jeton MCP"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "toolDescription": "Liste les alertes Prometheus actuellement actives sur l'infra de Louis (nom, severite, machine, depuis quand). A utiliser pour 'comment va l'infra ?'.",
+        "method": "GET",
+        "url": "@@ALERTMANAGER_URL@@/api/v2/alerts",
+        "options": {
+          "timeout": 20000
+        },
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "active",
+              "value": "true"
+            },
+            {
+              "name": "silenced",
+              "value": "false"
+            },
+            {
+              "name": "inhibited",
+              "value": "false"
+            }
+          ]
+        }
+      },
+      "id": "outil-infra_alertes",
+      "name": "infra_alertes",
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.2,
+      "position": [
+        -400,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "toolDescription": "Execute une requete PromQL instantanee en lecture seule sur le Prometheus de l'infra (ex: node_filesystem_avail_bytes, up, zfs_pool_health). Renvoie le JSON brut de /api/v1/query.",
+        "method": "GET",
+        "url": "@@PROMETHEUS_URL@@/api/v1/query",
+        "options": {
+          "timeout": 20000
+        },
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "query",
+              "value": "={{ $fromAI('promql', `Requete PromQL a executer`, 'string') }}"
+            }
+          ]
+        }
+      },
+      "id": "outil-infra_prometheus",
+      "name": "infra_prometheus",
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.2,
+      "position": [
+        -200,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "toolDescription": "Lit l'agenda Nextcloud de Louis sur les N prochains jours (evenements recurrents deplies). Renvoie du iCalendar (VEVENT: SUMMARY, DTSTART, DTEND, LOCATION). Heures en Europe/Paris sauf mention contraire.",
+        "method": "GET",
+        "url": "=@@NEXTCLOUD_URL@@@@NC_CALENDAR_PATH@@?export&expand=1&start={{ Math.floor(Date.now() / 1000) }}&end={{ Math.floor(Date.now() / 1000) + 86400 * $fromAI('jours', `Nombre de jours a lire a partir de maintenant (1 a 31)`, 'number') }}",
+        "options": {
+          "timeout": 20000
+        },
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBasicAuth"
+      },
+      "id": "outil-agenda",
+      "name": "agenda",
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.2,
+      "position": [
+        0,
+        300
+      ],
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "majCredNextcloud1",
+          "name": "Majordome - Nextcloud"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "toolDescription": "Previsions meteo du domicile de Louis pour les prochains jours (temperatures min/max, pluie, vent, code meteo WMO).",
+        "method": "GET",
+        "url": "https://api.open-meteo.com/v1/forecast",
+        "options": {
+          "timeout": 20000
+        },
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "latitude",
+              "value": "@@METEO_LAT@@"
+            },
+            {
+              "name": "longitude",
+              "value": "@@METEO_LON@@"
+            },
+            {
+              "name": "daily",
+              "value": "weather_code,temperature_2m_max,temperature_2m_min,precipitation_sum,precipitation_probability_max,wind_speed_10m_max"
+            },
+            {
+              "name": "current",
+              "value": "temperature_2m,weather_code,wind_speed_10m"
+            },
+            {
+              "name": "timezone",
+              "value": "Europe/Paris"
+            },
+            {
+              "name": "forecast_days",
+              "value": "={{ $fromAI('jours', `Nombre de jours de prevision (1 a 7)`, 'number') }}"
+            }
+          ]
+        }
+      },
+      "id": "outil-meteo",
+      "name": "meteo",
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.2,
+      "position": [
+        200,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "toolDescription": "Lit l'etat de la maison dans Home Assistant en evaluant un template Jinja (lecture seule, ne change rien). Exemples : \"{{ states('sensor.temperature_salon') }}\", \"{{ states.light | selectattr('state','eq','on') | map(attribute='name') | list }}\".",
+        "method": "POST",
+        "url": "@@HA_URL@@/api/template",
+        "options": {
+          "timeout": 20000
+        },
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ template: $fromAI('template', `Template Jinja Home Assistant a evaluer`, 'string') }) }}"
+      },
+      "id": "outil-maison_lecture",
+      "name": "maison_lecture",
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.2,
+      "position": [
+        400,
+        300
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "majCredHomeAssist",
+          "name": "Majordome - Home Assistant"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "toolDescription": "Lance un script Home Assistant (seule action possible sur la maison). Les scripts autorises sont ceux que Louis a crees dans HA, ex: script.majordome_tout_eteindre. Demander confirmation a Louis avant.",
+        "method": "POST",
+        "url": "@@HA_URL@@/api/services/script/turn_on",
+        "options": {
+          "timeout": 20000
+        },
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ entity_id: $fromAI('script', `Entite du script, ex: script.majordome_tout_eteindre`, 'string') }) }}"
+      },
+      "id": "outil-maison_script",
+      "name": "maison_script",
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.2,
+      "position": [
+        600,
+        300
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "majCredHomeAssist",
+          "name": "Majordome - Home Assistant"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "toolDescription": "Cherche un film ou une serie dans Seerr (TMDB) et indique s'il est deja disponible ou demande. Renvoie id, mediaType, titre, annee.",
+        "method": "GET",
+        "url": "@@SEERR_URL@@/api/v1/search",
+        "options": {
+          "timeout": 20000
+        },
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "query",
+              "value": "={{ $fromAI('titre', `Titre du film ou de la serie`, 'string') }}"
+            },
+            {
+              "name": "language",
+              "value": "fr"
+            }
+          ]
+        }
+      },
+      "id": "outil-films_recherche",
+      "name": "films_recherche",
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.2,
+      "position": [
+        800,
+        300
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "majCredSeerrApi01",
+          "name": "Majordome - Seerr"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "toolDescription": "Demande un film ou une serie dans Seerr (telechargement automatique ensuite). Utiliser l'id et le mediaType renvoyes par films_recherche. Demander confirmation a Louis avant.",
+        "method": "POST",
+        "url": "@@SEERR_URL@@/api/v1/request",
+        "options": {
+          "timeout": 20000
+        },
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ mediaType: $fromAI('mediaType', `movie ou tv`, 'string'), mediaId: $fromAI('mediaId', `Identifiant TMDB renvoye par films_recherche`, 'number'), seasons: $fromAI('mediaType', `movie ou tv`, 'string') === 'tv' ? 'all' : undefined }) }}"
+      },
+      "id": "outil-films_demande",
+      "name": "films_demande",
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.2,
+      "position": [
+        1000,
+        300
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "majCredSeerrApi01",
+          "name": "Majordome - Seerr"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "infra_alertes": {
+      "ai_tool": [
+        [
+          {
+            "node": "MCP Server Trigger",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "infra_prometheus": {
+      "ai_tool": [
+        [
+          {
+            "node": "MCP Server Trigger",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "agenda": {
+      "ai_tool": [
+        [
+          {
+            "node": "MCP Server Trigger",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "meteo": {
+      "ai_tool": [
+        [
+          {
+            "node": "MCP Server Trigger",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "maison_lecture": {
+      "ai_tool": [
+        [
+          {
+            "node": "MCP Server Trigger",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "maison_script": {
+      "ai_tool": [
+        [
+          {
+            "node": "MCP Server Trigger",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "films_recherche": {
+      "ai_tool": [
+        [
+          {
+            "node": "MCP Server Trigger",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "films_demande": {
+      "ai_tool": [
+        [
+          {
+            "node": "MCP Server Trigger",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataSuccessExecution": "all"
+  },
+  "tags": []
+}

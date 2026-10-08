@@ -1,0 +1,5 @@
+# Secrets : ne jamais commiter
+.env
+*.env
+!*.env.example
+n8n/import/

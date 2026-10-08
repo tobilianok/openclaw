@@ -1,0 +1,202 @@
+// Configuration OpenClaw du majordome, a copier dans ~/.openclaw/openclaw.json
+// sur la VM 106 "majordome" (192.168.1.22). Valide avec OpenClaw 2026.9.8.
+//
+// Les secrets ne sont jamais ecrits ici : ils viennent de ~/.openclaw/.env
+// (voir .env.example) via la substitution ${VAR}.
+//
+// Deux agents, un par salon Talk :
+//   - majordome : salon "Majordome". Modele local (RX 6800) si le PC est
+//     allume, sinon IA cloud gratuite. N'a AUCUN outil sensible.
+//   - prive     : salon "Majordome prive". 100 % local, pas de secours cloud.
+//     Seul agent qui voit Paperless et la memoire sensible. PC eteint = pas
+//     de reponse, c'est voulu (regle "sensible = local uniquement").
+{
+  gateway: {
+    mode: "local",
+    port: 18789,
+    // Ecoute sur le LAN : Nextcloud (.12) pousse le webhook Talk, n8n (.14)
+    // appelle /hooks. Le pare-feu Proxmox de la VM filtre qui peut entrer.
+    bind: "lan",
+    auth: {
+      mode: "token",
+      token: "${OPENCLAW_GATEWAY_TOKEN}",
+    },
+  },
+
+  models: {
+    providers: {
+      // Ollama sur le PC perso (Ubuntu 26.04, RX 6800 16 Go).
+      // URL native, SANS /v1 (sinon les appels d'outils cassent).
+      ollama: {
+        baseUrl: "${OLLAMA_BASE_URL}",
+        apiKey: "ollama-local",
+        api: "ollama",
+        // Delai court : si le PC est eteint, on veut basculer vite sur le
+        // cloud plutot qu'attendre. Le 1er chargement du modele en VRAM
+        // prend ~10-20 s sur la RX 6800, 120 s laisse de la marge.
+        timeoutSeconds: 120,
+        maxTokens: 8192,
+        models: [
+          {
+            id: "qwen3:14b",
+            name: "qwen3:14b",
+            reasoning: true,
+            input: ["text"],
+            // ~9 Go de poids + ~5 Go de cache a 32k = tient dans 16 Go.
+            // Si Ollama deborde en RAM (lenteur), descendre a 24576.
+            contextTokens: 32768,
+            params: {
+              num_ctx: 32768,
+              thinking: false,
+              keep_alive: "30m",
+            },
+          },
+        ],
+      },
+      // Secours cloud gratuits. Les identifiants se lisent dans
+      // GEMINI_API_KEY et MISTRAL_API_KEY (.env).
+    },
+  },
+
+  // Recherche dans la memoire : les "embeddings" sont calcules par Ollama sur
+  // le PC, jamais dans le cloud (par defaut OpenClaw utiliserait OpenAI).
+  // PC eteint = recherche semantique indisponible ; USER.md et MEMORY.md
+  // restent charges a chaque conversation.
+  memory: {
+    search: {
+      provider: "ollama",
+      model: "qwen3-embedding:0.6b",
+      fallback: "none",
+    },
+  },
+
+  agents: {
+    ownership: "explicit",
+    defaults: {
+      userTimezone: "Europe/Paris",
+      // Agent "proprietaire" du travail systeme (Talk, doctor, catalogue...).
+      systemAgent: { agentId: "majordome" },
+      // Pas de heartbeat OpenClaw : c'est n8n qui rythme la journee
+      // (briefing, bilan). Evite aussi de bruler le quota cloud gratuit.
+      heartbeat: { agentId: "majordome", every: "0m" },
+    },
+    entries: {
+      majordome: {
+        workspace: "~/.openclaw/workspace-majordome",
+        model: {
+          primary: "ollama/qwen3:14b",
+          // Bascule automatique, tour par tour : chaque message retente
+          // d'abord le PC, puis Gemini, puis Mistral.
+          fallbacks: ["google/gemini-3-flash-preview", "mistral/mistral-small-latest"],
+        },
+        tools: {
+          profile: "coding",
+          // Ce que le majordome ne doit jamais avoir :
+          // - les outils sensibles de n8n (reserves a l'agent "prive")
+          // - l'execution de commandes sur la VM (group:runtime)
+          // - le navigateur
+          deny: ["n8n-sensible__*", "group:runtime", "browser"],
+        },
+      },
+      prive: {
+        workspace: "~/.openclaw/workspace-prive",
+        model: {
+          primary: "ollama/qwen3:14b",
+          // Liste vide = strict : jamais de cloud, meme en cas de panne.
+          fallbacks: [],
+        },
+        tools: {
+          profile: "coding",
+          deny: ["group:runtime", "browser", "group:web"],
+        },
+      },
+    },
+  },
+
+  // Les deux salons Talk. Le jeton d'un salon est la fin de son URL :
+  // https://<nextcloud>/call/<jeton>. Remplacer JETON_SALON_MAJORDOME et
+  // JETON_SALON_PRIVE ici ET dans channels.nextcloud-talk.rooms (les cles
+  // d'objet ne supportent pas la substitution ${VAR}).
+  bindings: [
+    {
+      agentId: "prive",
+      comment: "Salon Talk 'Majordome prive' : 100 % local",
+      match: {
+        channel: "nextcloud-talk",
+        peer: { kind: "group", id: "JETON_SALON_PRIVE" },
+      },
+    },
+    {
+      agentId: "majordome",
+      comment: "Salon Talk 'Majordome' : local puis cloud gratuit",
+      match: {
+        channel: "nextcloud-talk",
+        peer: { kind: "group", id: "JETON_SALON_MAJORDOME" },
+      },
+    },
+  ],
+
+  // Plugin externe (installe avec `openclaw plugins install`) : il doit etre
+  // explicitement autorise, sinon le canal Talk ne demarre pas.
+  plugins: {
+    entries: {
+      "nextcloud-talk": { enabled: true },
+    },
+  },
+
+  channels: {
+    "nextcloud-talk": {
+      enabled: true,
+      baseUrl: "${NEXTCLOUD_URL}",
+      botSecret: "${NEXTCLOUD_TALK_BOT_SECRET}",
+      legacyWebhook: false,
+      webhookPath: "/nextcloud-talk-webhook",
+      // Personne d'autre que toi : pas de DM, salons sur liste blanche,
+      // et seul ton identifiant Nextcloud est accepte.
+      dmPolicy: "disabled",
+      groupPolicy: "allowlist",
+      // Nextcloud envoie l'expediteur sous la forme "users/<id>" : les deux
+      // formes sont listees (a confirmer au 1er message, voir le guide).
+      groupAllowFrom: ["${NEXTCLOUD_USER_ID}", "users/${NEXTCLOUD_USER_ID}"],
+      rooms: {
+        "JETON_SALON_MAJORDOME": { requireMention: false },
+        "JETON_SALON_PRIVE": { requireMention: false },
+      },
+      markdown: { tables: "bullets" },
+      // A activer seulement si NEXTCLOUD_URL resout vers une IP privee
+      // (DNS local / hairpin). Voir docs/installation.md, etape 4.
+      // network: { dangerouslyAllowPrivateNetwork: true },
+    },
+  },
+
+  // Les "mains" du majordome : deux serveurs MCP exposes par n8n.
+  // Les jetons Home Assistant, Paperless, Nextcloud... restent dans n8n.
+  mcp: {
+    servers: {
+      "n8n-outils": {
+        url: "${N8N_MCP_OUTILS_URL}",
+        transport: "streamable-http",
+        connectionTimeoutMs: 5000,
+        requestTimeoutMs: 30000,
+        headers: { Authorization: "Bearer ${N8N_MCP_TOKEN}" },
+      },
+      "n8n-sensible": {
+        url: "${N8N_MCP_SENSIBLE_URL}",
+        transport: "streamable-http",
+        connectionTimeoutMs: 5000,
+        requestTimeoutMs: 30000,
+        headers: { Authorization: "Bearer ${N8N_MCP_TOKEN}" },
+      },
+    },
+  },
+
+  // Point d'entree HTTP pour que n8n declenche le majordome
+  // (briefing du matin, bilan du soir...).
+  hooks: {
+    enabled: true,
+    token: "${OPENCLAW_HOOKS_TOKEN}",
+    path: "/hooks",
+    allowedAgentIds: ["majordome"],
+    allowRequestSessionKey: false,
+  },
+}
