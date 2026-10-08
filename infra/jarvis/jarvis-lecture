@@ -4,60 +4,149 @@
 # Installe dans /usr/local/bin/jarvis-lecture et branche dans
 # ~jarvis/.ssh/authorized_keys via command="/usr/local/bin/jarvis-lecture".
 # Quelle que soit la commande demandee par le client SSH, c'est ce script
-# qui s'execute : il n'accepte qu'une liste fermee de commandes de
-# diagnostic, sans shell (pas de ; | & $ ` > < ...), avec des arguments
-# verifies un par un. Tout le reste est refuse.
+# qui s'execute : il n'accepte que des commandes de LECTURE, sans shell
+# (pas de ; | & $ ` > < ...), avec des arguments verifies un par un.
+#
+# Lecture large (fichiers, dossiers, conteneurs, processus...) mais :
+#  - fichiers de secrets interdits (shadow, cles SSH/TLS, sudoers...) ;
+#  - dans tout ce qui sort, les valeurs des mots de passe, jetons, cles
+#    d'API et cles privees sont masquees (la sortie part vers des IA cloud).
 set -uo pipefail
 
 refuser() { echo "REFUSE : $*" >&2; exit 126; }
 
 demande="${SSH_ORIGINAL_COMMAND:-}"
 [ -n "$demande" ] || refuser "aucune commande"
-[ ${#demande} -le 300 ] || refuser "commande trop longue"
+[ ${#demande} -le 400 ] || refuser "commande trop longue"
 # Uniquement lettres, chiffres, espaces et . _ - / @ : = , +
 if [[ ! "$demande" =~ ^[A-Za-z0-9\ ._/@:=,+-]+$ ]]; then
-  refuser "caracteres interdits (pas de shell : ; | & \$ \` < > ' \" * ? etc.)"
+  refuser "caracteres interdits (pas de shell : ; | & \$ \` < > ' \" * ? [ ] etc.)"
 fi
 read -r -a a <<< "$demande"
 
 nom='^[A-Za-z0-9@._:-]{1,80}$'      # unite systemd, conteneur, pool ZFS
-nombre='^[0-9]{1,3}$'               # lignes de journal (max 999)
-chemin='^/[A-Za-z0-9/._-]{0,120}$'  # pour df
+nombre='^[0-9]{1,4}$'               # nombre de lignes (max 9999)
 vmid='^[0-9]{1,6}$'
 disque='^/dev/(sd[a-z]{1,2}|nvme[0-9]{1,2}n[0-9]{1,2}|vd[a-z])$'
+motif='^[A-Za-z0-9._:@=,+-]{1,80}$' # motif de recherche (grep, find -name)
+
+# Chemins : absolus, sans "..", hors fichiers de secrets.
+chemin_ok() {
+  local c="$1"
+  [[ "$c" =~ ^/[A-Za-z0-9/._@:=,+-]{0,250}$ ]] || return 1
+  [[ "$c" == *..* ]] && return 1
+  local bas="${c,,}"
+  case "$bas" in
+    /etc/shadow*|/etc/gshadow*|/etc/sudoers*|/etc/security/opasswd|/etc/ssh/ssh_host_*) return 1 ;;
+    */.ssh|*/.ssh/*|/root/.ssh*|*/.gnupg|*/.gnupg/*) return 1 ;;
+    */id_rsa*|*/id_ed25519*|*/id_ecdsa*|*/id_dsa*) return 1 ;;
+    *.key|*.pem|*.p12|*.pfx|*.jks|*.keystore|*/privkey*) return 1 ;;
+    */.netrc|*/.git-credentials|*/.pgpass|*/.my.cnf|*/.docker/config.json) return 1 ;;
+    /proc/*/environ|/proc/*/mem|/proc/kcore|/dev/mem|/sys/firmware/efi/efivars*) return 1 ;;
+    /etc/pve/priv*|/etc/pve/nodes/*/pve-ssl.key|/var/lib/pve-cluster*) return 1 ;;
+  esac
+  return 0
+}
+chemin() {
+  chemin_ok "$1" || refuser "chemin interdit ou invalide : $1"
+  # Un lien symbolique ne doit pas mener a un fichier interdit
+  local reel
+  reel="$(sudo -n realpath -m -- "$1" 2>/dev/null || echo "$1")"
+  chemin_ok "$reel" || refuser "chemin interdit (lien vers $reel)"
+}
+
+# Masque les secrets dans la sortie : CLE=valeur, "cle": "valeur", cles privees.
+masquer() {
+  sed -E \
+    -e '/-----BEGIN [A-Z ]*PRIVATE KEY-----/,/-----END [A-Z ]*PRIVATE KEY-----/c\[cle privee masquee]' \
+    -e 's/((pass(word|wd|phrase)?|pwd|secret|token|api[_-]?key|apikey|access[_-]?key|private[_-]?key|client[_-]?secret|credential|auth[_-]?key|salt|encryption[_-]?key|jwt)[A-Za-z0-9_.-]*["'"'"']?[[:space:]]*[:=][[:space:]]*["'"'"']?)[^[:space:]"'"'"',}]+/\1***masque***/Ig' \
+    -e 's#(://[^/:@[:space:]]+:)[^@/[:space:]]+@#\1***masque***@#g'
+}
 
 ok() { executer "$@"; exit $?; }
 executer() {
-  # sudo -n : jamais de mot de passe ; timeout et taille de sortie bornes
-  timeout 25 sudo -n -- "$@" 2>&1 | head -c 40000
+  # sudo -n : jamais de mot de passe ; timeout, masquage et taille bornes
+  timeout 25 sudo -n -- "$@" 2>&1 | masquer | head -c 40000
   return "${PIPESTATUS[0]}"
 }
 
 n=${#a[@]}
 case "${a[0]}" in
-  uptime|hostname|lsblk|sensors|uname)
+  uptime|hostname|lsblk|sensors|uname|whoami|date|lscpu|lsusb|lspci)
     [ "$n" -eq 1 ] || { [ "${a[0]}" = uname ] && [ "$n" -eq 2 ] && [ "${a[1]}" = -a ]; } || refuser "arguments"
     ok "${a[@]}" ;;
   free)
     [ "$n" -eq 2 ] && [ "${a[1]}" = -h ] || refuser "usage : free -h"
     ok free -h ;;
-  df)
-    [ "$n" -ge 2 ] && [ "$n" -le 3 ] && [ "${a[1]}" = -h ] || refuser "usage : df -h [chemin]"
-    [ "$n" -eq 2 ] || [[ "${a[2]}" =~ $chemin ]] || refuser "chemin"
+  df|du)
+    # df -h [chemin] | du -sh <chemin>
+    if [ "${a[0]}" = df ]; then
+      [ "$n" -ge 2 ] && [ "$n" -le 3 ] && [ "${a[1]}" = -h ] || refuser "usage : df -h [chemin]"
+    else
+      [ "$n" -eq 3 ] && [[ "${a[1]}" =~ ^-(sh|h|s)$ ]] || refuser "usage : du -sh <chemin>"
+    fi
+    [ "$n" -eq 2 ] || chemin "${a[2]}"
+    ok "${a[@]}" ;;
+  ls)
+    # ls [-l|-la|-lah|-a|-lh|-R] <chemin>
+    [ "$n" -ge 2 ] && [ "$n" -le 3 ] || refuser "usage : ls [-lah] <chemin>"
+    if [ "$n" -eq 3 ]; then [[ "${a[1]}" =~ ^-[lahRtrS]{1,5}$ ]] || refuser "options ls"; fi
+    chemin "${a[$((n-1))]}"
+    ok "${a[@]}" ;;
+  cat|stat|file)
+    [ "$n" -eq 2 ] || refuser "usage : ${a[0]} <fichier>"
+    chemin "${a[1]}"
+    ok "${a[@]}" ;;
+  head|tail)
+    # head|tail [-n N] <fichier>
+    if [ "$n" -eq 4 ]; then [ "${a[1]}" = -n ] && [[ "${a[2]}" =~ $nombre ]] || refuser "usage : ${a[0]} -n <N> <fichier>"
+    else [ "$n" -eq 2 ] || refuser "usage : ${a[0]} [-n N] <fichier>"; fi
+    chemin "${a[$((n-1))]}"
+    ok "${a[@]}" ;;
+  grep)
+    # grep [-i|-n|-r|-l|-c...] <motif> <chemin>
+    [ "$n" -ge 3 ] && [ "$n" -le 4 ] || refuser "usage : grep [-inrlc] <motif> <chemin>"
+    if [ "$n" -eq 4 ]; then [[ "${a[1]}" =~ ^-[inrlcwv]{1,5}$ ]] || refuser "options grep"; fi
+    [[ "${a[$((n-2))]}" =~ $motif ]] || refuser "motif"
+    chemin "${a[$((n-1))]}"
+    ok grep --exclude-dir=.ssh --exclude-dir=.gnupg --exclude='id_*' --exclude='*.key' --exclude='*.pem' \
+       --exclude='*.p12' --exclude='shadow*' --exclude='gshadow*' --exclude='.netrc' --exclude='.git-credentials' \
+       --exclude='.pgpass' --exclude-dir=priv --binary-files=without-match "${a[@]:1}" ;;
+  find)
+    # find <chemin> -maxdepth N [-type f|d] [-name motif]
+    [ "$n" -ge 4 ] && [ "${a[2]}" = -maxdepth ] && [[ "${a[3]}" =~ ^[1-5]$ ]] || refuser "usage : find <chemin> -maxdepth 1-5 [-type f|d] [-name motif]"
+    chemin "${a[1]}"
+    i=4
+    while [ "$i" -lt "$n" ]; do
+      case "${a[$i]}" in
+        -type) [[ "${a[$((i+1))]:-}" =~ ^[fdl]$ ]] || refuser "-type f|d|l" ;;
+        -name|-iname) [[ "${a[$((i+1))]:-}" =~ $motif ]] || refuser "motif -name" ;;
+        *) refuser "option find : ${a[$i]}" ;;
+      esac
+      i=$((i+2))
+    done
     ok "${a[@]}" ;;
   ip)
-    [ "$n" -eq 3 ] && [ "${a[1]}" = -br ] && [[ "${a[2]}" =~ ^(a|addr|link)$ ]] || refuser "usage : ip -br a"
+    [ "$n" -eq 3 ] && [ "${a[1]}" = -br ] && [[ "${a[2]}" =~ ^(a|addr|link)$ ]] || \
+      { [ "$n" -eq 2 ] && [[ "${a[1]}" =~ ^(route|r)$ ]]; } || refuser "usage : ip -br a | ip route"
     ok "${a[@]}" ;;
-  cat)
-    [ "$n" -eq 2 ] && [[ "${a[1]}" =~ ^(/etc/os-release|/proc/loadavg|/proc/mdstat)$ ]] || refuser "cat limite a /etc/os-release, /proc/loadavg, /proc/mdstat"
+  ss)
+    [ "$n" -eq 2 ] && [[ "${a[1]}" =~ ^-[tulpnae]{2,6}$ ]] || refuser "usage : ss -tulpn"
     ok "${a[@]}" ;;
+  ps)
+    [ "$n" -eq 2 ] && [[ "${a[1]}" =~ ^(aux|-ef)$ ]] || refuser "usage : ps aux"
+    ok ps "${a[1]}" ;;
   systemctl)
     if [ "$n" -eq 2 ] && [ "${a[1]}" = --failed ]; then ok systemctl --failed --no-pager; fi
-    [ "$n" -eq 3 ] && [[ "${a[1]}" =~ ^(status|is-active|is-enabled)$ ]] && [[ "${a[2]}" =~ $nom ]] || refuser "usage : systemctl --failed | status|is-active|is-enabled <unite>"
+    if [ "$n" -ge 2 ] && [[ "${a[1]}" =~ ^(list-units|list-timers|list-unit-files)$ ]]; then
+      [ "$n" -eq 2 ] || { [ "$n" -eq 3 ] && [[ "${a[2]}" =~ ^--type=(service|timer|mount|socket)$ ]]; } || refuser "usage : systemctl list-units [--type=service]"
+      ok systemctl "${a[@]:1}" --no-pager
+    fi
+    [ "$n" -eq 3 ] && [[ "${a[1]}" =~ ^(status|is-active|is-enabled|cat|show)$ ]] && [[ "${a[2]}" =~ $nom ]] || refuser "usage : systemctl --failed | list-units | status|is-active|is-enabled|cat|show <unite>"
     ok systemctl "${a[1]}" "${a[2]}" --no-pager ;;
   journalctl)
-    # journalctl -u <unite> -n <N> | journalctl -p err -n <N> | journalctl -b -n <N>
-    [ "$n" -eq 5 ] || refuser "usage : journalctl -u <unite>|-p err|-b -n <N>"
+    # journalctl -u <unite> -n <N> | journalctl -p err -n <N> | journalctl -b 0 -n <N>
+    [ "$n" -eq 5 ] || refuser "usage : journalctl -u <unite>|-p err|-b 0 -n <N>"
     case "${a[1]}" in
       -u) [[ "${a[2]}" =~ $nom ]] || refuser "unite" ;;
       -p) [[ "${a[2]}" =~ ^(emerg|alert|crit|err|warning)$ ]] || refuser "priorite" ;;
@@ -69,42 +158,72 @@ case "${a[0]}" in
   docker)
     case "${a[1]:-}" in
       ps) [ "$n" -eq 2 ] || { [ "$n" -eq 3 ] && [ "${a[2]}" = -a ]; } || refuser "usage : docker ps [-a]"
-          ok docker ps "${a[@]:2}" --format 'table {{.Names}}\t{{.Status}}\t{{.Image}}' ;;
+          ok docker ps "${a[@]:2}" --format 'table {{.Names}}\t{{.Status}}\t{{.Image}}\t{{.Ports}}' ;;
       stats) [ "$n" -eq 2 ] || refuser "usage : docker stats"; ok docker stats --no-stream ;;
+      images|volume|network|version|info|df)
+          case "${a[1]}" in
+            volume|network) [ "$n" -eq 3 ] && [ "${a[2]}" = ls ] || \
+                              { [ "$n" -eq 4 ] && [ "${a[2]}" = inspect ] && [[ "${a[3]}" =~ $nom ]]; } || refuser "usage : docker ${a[1]} ls | inspect <nom>" ;;
+            *) [ "$n" -eq 2 ] || refuser "usage : docker ${a[1]}" ;;
+          esac
+          ok "${a[@]}" ;;
+      inspect) [ "$n" -eq 3 ] && [[ "${a[2]}" =~ $nom ]] || refuser "usage : docker inspect <conteneur|image>"
+               ok docker inspect "${a[2]}" ;;
       logs) [ "$n" -eq 5 ] && [ "${a[2]}" = --tail ] && [[ "${a[3]}" =~ $nombre ]] && [[ "${a[4]}" =~ $nom ]] || refuser "usage : docker logs --tail <N> <conteneur>"
             ok docker logs --tail "${a[3]}" "${a[4]}" ;;
-      compose) [ "$n" -eq 3 ] && [ "${a[2]}" = ls ] || refuser "usage : docker compose ls"; ok docker compose ls ;;
-      *) refuser "docker : ps, stats, logs, compose ls" ;;
+      compose)
+          # docker compose ls | docker compose --project-directory <dossier> ps|images|config|ls
+          if [ "$n" -eq 3 ] && [ "${a[2]}" = ls ]; then ok docker compose ls; fi
+          [ "$n" -eq 5 ] && [ "${a[2]}" = --project-directory ] && [[ "${a[4]}" =~ ^(ps|images|config|version)$ ]] || \
+            refuser "usage : docker compose ls | docker compose --project-directory <dossier> ps|images|config"
+          chemin "${a[3]}"
+          ok docker compose --project-directory "${a[3]}" "${a[4]}" ;;
+      *) refuser "docker : ps, stats, logs, inspect, images, volume, network, info, df, compose" ;;
     esac ;;
   zpool)
     [[ "${a[1]:-}" =~ ^(status|list)$ ]] && { [ "$n" -eq 2 ] || { [ "$n" -eq 3 ] && [[ "${a[2]}" =~ $nom ]]; }; } || refuser "usage : zpool status|list [pool]"
     ok "${a[@]}" ;;
   zfs)
-    [ "$n" -eq 2 ] && [ "${a[1]}" = list ] || refuser "usage : zfs list"
-    ok zfs list ;;
+    [ "$n" -ge 2 ] && [ "${a[1]}" = list ] || refuser "usage : zfs list [-t snapshot]"
+    [ "$n" -eq 2 ] || { [ "$n" -eq 4 ] && [ "${a[2]}" = -t ] && [[ "${a[3]}" =~ ^(snapshot|all|volume|filesystem)$ ]]; } || refuser "usage : zfs list [-t snapshot]"
+    ok "${a[@]}" ;;
   qm|pct)
     if [ "$n" -eq 2 ] && [ "${a[1]}" = list ]; then ok "${a[@]}"; fi
     [ "$n" -eq 3 ] && [[ "${a[1]}" =~ ^(status|config)$ ]] && [[ "${a[2]}" =~ $vmid ]] || refuser "usage : qm|pct list | status|config <id>"
     ok "${a[@]}" ;;
-  pvesm)
+  pvesm|pveversion)
+    if [ "${a[0]}" = pveversion ]; then [ "$n" -le 2 ] || refuser "usage : pveversion [-v]"; ok "${a[@]}"; fi
     [ "$n" -eq 2 ] && [ "${a[1]}" = status ] || refuser "usage : pvesm status"
     ok pvesm status ;;
   apt)
-    [ "$n" -eq 3 ] && [ "${a[1]}" = list ] && [ "${a[2]}" = --upgradable ] || refuser "usage : apt list --upgradable"
-    ok apt list --upgradable ;;
+    [ "$n" -eq 3 ] && [ "${a[1]}" = list ] && [[ "${a[2]}" =~ ^--(upgradable|installed)$ ]] || refuser "usage : apt list --upgradable|--installed"
+    ok "${a[@]}" ;;
+  dpkg)
+    [ "$n" -eq 3 ] && [ "${a[1]}" = -l ] && [[ "${a[2]}" =~ $nom ]] || refuser "usage : dpkg -l <paquet>"
+    ok "${a[@]}" ;;
   smartctl)
-    [ "$n" -eq 3 ] && [[ "${a[1]}" =~ ^(-H|-A)$ ]] && [[ "${a[2]}" =~ $disque ]] || refuser "usage : smartctl -H|-A /dev/sdX"
+    [ "$n" -eq 3 ] && [[ "${a[1]}" =~ ^(-H|-A|-a|-i)$ ]] && [[ "${a[2]}" =~ $disque ]] || refuser "usage : smartctl -H|-A|-a|-i /dev/sdX"
+    ok "${a[@]}" ;;
+  crontab)
+    [ "$n" -eq 4 ] && [ "${a[1]}" = -l ] && [ "${a[2]}" = -u ] && [[ "${a[3]}" =~ ^[a-z_][a-z0-9_-]{0,31}$ ]] || refuser "usage : crontab -l -u <utilisateur>"
     ok "${a[@]}" ;;
   aide)
     cat <<'EOF'
-Commandes de lecture autorisees :
-  uptime | hostname | uname -a | lsblk | sensors | free -h | df -h [chemin]
-  ip -br a | cat /etc/os-release | cat /proc/loadavg | cat /proc/mdstat
-  systemctl --failed | systemctl status|is-active|is-enabled <unite>
-  journalctl -u <unite> -n <N> | journalctl -p err -n <N> | journalctl -b 0 -n <N>
-  docker ps [-a] | docker stats | docker logs --tail <N> <conteneur> | docker compose ls
-  zpool status|list [pool] | zfs list | qm|pct list | qm|pct status|config <id> | pvesm status
-  apt list --upgradable | smartctl -H|-A /dev/sdX
+Commandes de lecture autorisees (les secrets sont masques dans les sorties) :
+  Systeme  : uptime | hostname | uname -a | date | lscpu | lsblk | lsusb | lspci | sensors | free -h
+             ps aux | ss -tulpn | ip -br a | ip route | crontab -l -u <user>
+  Fichiers : ls [-lah] <chemin> | cat|stat|file <fichier> | head|tail [-n N] <fichier>
+             grep [-inrlc] <motif> <chemin> | find <chemin> -maxdepth 1-5 [-type f|d] [-name motif]
+             df -h [chemin] | du -sh <chemin>     (chemins absolus, pas de cles ni de shadow)
+  Services : systemctl --failed | list-units [--type=service] | list-timers
+             systemctl status|is-active|is-enabled|cat|show <unite>
+             journalctl -u <unite> -n <N> | journalctl -p err -n <N> | journalctl -b 0 -n <N>
+  Docker   : docker ps [-a] | stats | images | info | df | inspect <nom> | logs --tail <N> <nom>
+             docker volume|network ls | docker volume|network inspect <nom>
+             docker compose ls | docker compose --project-directory <dossier> ps|images|config
+  Stockage : zpool status|list [pool] | zfs list [-t snapshot] | smartctl -H|-A|-a|-i /dev/sdX
+  Proxmox  : qm|pct list | qm|pct status|config <id> | pvesm status | pveversion [-v]
+  Paquets  : apt list --upgradable|--installed | dpkg -l <paquet>
 EOF
     exit 0 ;;
   *) refuser "commande non autorisee en lecture (tape 'aide' pour la liste)" ;;

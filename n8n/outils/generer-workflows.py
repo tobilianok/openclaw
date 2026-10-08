@@ -183,17 +183,29 @@ MACHINES = ("ml150 (hyperviseur Proxmox), srv-nas (NAS ZFS, Jellyfin), nextcloud
 outils += [
     outil_http(
         "infra_ssh_lecture", [1200, 300],
-        "Lit l'etat d'une machine de l'infra en SSH (diagnostic uniquement, aucune modification). "
-        f"Machines : {MACHINES}. Commandes autorisees : uptime, hostname, uname -a, lsblk, sensors, "
-        "free -h, df -h [chemin], ip -br a, cat /etc/os-release|/proc/loadavg|/proc/mdstat, "
-        "systemctl --failed, systemctl status|is-active|is-enabled <unite>, "
-        "journalctl -u <unite> -n <N> | journalctl -p err -n <N> | journalctl -b 0 -n <N>, "
-        "docker ps [-a], docker stats, docker logs --tail <N> <conteneur>, docker compose ls, "
-        "zpool status|list [pool], zfs list, qm|pct list, qm|pct status|config <id>, pvesm status, "
-        "apt list --upgradable, smartctl -H|-A /dev/sdX, aide. Pas de ; | & $ ni guillemets.",
+        "Lit l'etat d'une machine de l'infra en SSH (lecture seule, aucune modification possible). "
+        f"Machines : {MACHINES}. Une commande a la fois, chemins absolus, sans ; | & $ guillemets "
+        "ni jokers. Autorise notamment : ls [-lah] <chemin>, cat|head|tail [-n N] <fichier>, "
+        "grep [-inr] <motif> <chemin>, find <chemin> -maxdepth N [-type f|d] [-name motif], "
+        "du -sh, df -h, ps aux, ss -tulpn, ip route, systemctl status|cat|list-units, journalctl -u <unite> -n <N>, "
+        "docker ps|images|inspect|logs --tail N|volume ls, docker compose ls, "
+        "docker compose --project-directory <dossier> ps|images|config, zpool/zfs list, "
+        "qm|pct list|config, pvesm status, apt list --upgradable, smartctl, crontab -l -u <user>. "
+        "Commande 'aide' pour la liste complete. Les secrets (mots de passe, jetons, cles) sont "
+        "masques dans les sorties ; les cles SSH/TLS et /etc/shadow sont illisibles.",
         "POST", "@@JARVIS_SSH_URL@@/lecture", cle_cred="jarvis",
         corps="={{ JSON.stringify({ machine: $fromAI('machine', `Nom de la machine`, 'string'), "
               "commande: $fromAI('commande', `Commande de lecture autorisee`, 'string') }) }}",
+    ),
+    outil_http(
+        "notes_de_version", [1300, 500],
+        "Lit les notes de version d'un logiciel publie sur GitHub, depuis une version donnee "
+        "(ex: depot immich-app/immich, depuis v3.2.2). A utiliser AVANT toute proposition de mise "
+        "a jour pour reperer les changements cassants et les modifications a faire dans "
+        "docker-compose.yml ou .env.",
+        "POST", "@@JARVIS_SSH_URL@@/notes", cle_cred="jarvis",
+        corps="={{ JSON.stringify({ depot: $fromAI('depot', `Depot GitHub proprietaire/nom, ex: immich-app/immich`, 'string'), "
+              "depuis: $fromAI('depuis', `Version actuellement installee, ex: v3.2.2 (vide = dernieres versions)`, 'string') }) }}",
     ),
     outil_http(
         "infra_ssh_demande_action", [1400, 300],

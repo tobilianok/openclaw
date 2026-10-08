@@ -233,3 +233,36 @@ def test_pseudonyme_non_retabli_jamais_propose(env):
         "machine": "srv-nas", "commandes": "[ -f /tmp/x ] && [[ -d /tmp ]] && grep '[A-Z]' /etc/hostname",
         "explication": "x", "risques": "x", "retour_arriere": "x"})
     assert r.json()["statut"] == "en_attente_de_validation"
+
+
+def test_notes_de_version_filtrees():
+    """Sans SSH : GitHub simule."""
+    import tempfile
+    os.environ.update(JARVIS_SSH_TOKEN="tok", JARVIS_SSH_DATA=tempfile.mkdtemp())
+    publiees = [{"tag_name": t, "published_at": "2026-10-01T00:00:00Z", "body": f"notes {t}", "draft": False,
+                 "prerelease": t.endswith("rc")} for t in ["v3.4.0", "v3.4.1-rc", "v3.3.0", "v3.2.2", "v3.1.0"]]
+
+    def github(req):
+        assert req.url.path == "/repos/immich-app/immich/releases"
+        return httpx.Response(200, json=publiees)
+
+    class SansSsh(Executeur):
+        def preparer_cles(self):
+            pass
+
+    app = creer_app(CONFIG, executeur=SansSsh(Path(os.environ["JARVIS_SSH_DATA"])),
+                    client=httpx.AsyncClient(transport=httpx.MockTransport(github)))
+    with TestClient(app) as c:
+        r = c.post("/notes", headers=H, json={"depot": "immich-app/immich", "depuis": "v3.2.2"}).json()
+        assert [v["version"] for v in r["versions"]] == ["v3.3.0", "v3.4.0"] and r["derniere"] == "v3.4.0"
+        assert c.post("/notes", headers=H, json={"depot": "../../etc"}).status_code == 400
+
+
+def test_lecture_large_secrets_masques(env):
+    client, _ = env
+    Path("/tmp/jarvis-stack").mkdir(exist_ok=True)
+    Path("/tmp/jarvis-stack/.env").write_text("DB_PASSWORD=supersecret\nIMMICH_VERSION=v3.2.2\n")
+    r = lire(client, "srv-nas", "cat /tmp/jarvis-stack/.env")
+    assert r["code"] == 0 and "v3.2.2" in r["sortie"] and "supersecret" not in r["sortie"], r
+    assert lire(client, "srv-nas", "ls -la /tmp/jarvis-stack")["code"] == 0
+    assert "REFUSE" in lire(client, "srv-nas", "cat /etc/ssh/ssh_host_ed25519_key")["sortie"]

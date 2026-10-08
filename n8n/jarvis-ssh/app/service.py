@@ -35,7 +35,15 @@ from fastapi.responses import HTMLResponse, JSONResponse
 
 log = logging.getLogger("jarvis-ssh")
 
-CARACTERES_LECTURE = re.compile(r"^[A-Za-z0-9 ._/@:=,+-]{1,300}$")
+CARACTERES_LECTURE = re.compile(r"^[A-Za-z0-9 ._/@:=,+-]{1,400}$")
+DEPOT_GITHUB = re.compile(r"^[A-Za-z0-9_.-]{1,40}/[A-Za-z0-9_.-]{1,100}$")
+
+
+def _version(tag: str) -> tuple:
+    """'v3.2.2' -> (3, 2, 2), pour comparer des versions."""
+    return tuple(int(x) for x in re.findall(r"\d+", tag)[:4])
+
+
 # Jeton de l'anonymiseur reste tel quel, ex. [IDENTIFIANT_1] ou [UTILISATEUR]
 PSEUDONYME = re.compile(r"\[(?:[A-Z]{3,}(?:_[A-Z]+)*_\d+|UTILISATEUR)\]")
 MAX_COMMANDES = 10
@@ -220,6 +228,37 @@ def creer_app(config: dict | None = None, executeur: Executeur | None = None,
         code, sortie = await executeur.lancer("lecture", m["hote"], commande, delai=40)
         log.info("lecture %s : %s -> %s", corps.get("machine"), commande, code)
         return {"machine": corps.get("machine"), "commande": commande, "code": code, "sortie": sortie}
+
+    # --- Notes de version GitHub (avant une mise a jour) --------------------
+    @app.post("/notes")
+    async def notes(request: Request):
+        verifier(request)
+        corps = await request.json()
+        depot = str(corps.get("depot", "")).strip().strip("/")
+        if not DEPOT_GITHUB.match(depot):
+            raise HTTPException(400, "depot attendu sous la forme proprietaire/nom, ex: immich-app/immich")
+        depuis = str(corps.get("depuis") or "").strip()
+        try:
+            r = await client.get(f"https://api.github.com/repos/{depot}/releases", params={"per_page": 30},
+                                 headers={"Accept": "application/vnd.github+json"}, timeout=20)
+        except httpx.HTTPError as e:
+            raise HTTPException(502, f"GitHub injoignable : {e}")
+        if r.status_code != 200:
+            raise HTTPException(502, f"GitHub a repondu {r.status_code}")
+        versions = [v for v in r.json() if not v.get("draft") and not v.get("prerelease")]
+        if depuis:
+            cible = _version(depuis)
+            versions = [v for v in versions if _version(v.get("tag_name", "")) > cible]
+        versions = versions[:8]
+        budget, sortie = 24000, []
+        for v in reversed(versions):  # de la plus ancienne a la plus recente
+            texte = (v.get("body") or "")[: max(1500, budget // max(1, len(versions)))]
+            sortie.append({"version": v.get("tag_name"), "date": (v.get("published_at") or "")[:10],
+                           "notes": texte})
+        return {"depot": depot, "depuis": depuis or None, "derniere": versions[0]["tag_name"] if versions else None,
+                "nombre": len(versions), "versions": sortie,
+                "consigne": "Cherche en priorite les changements cassants (breaking changes) et les "
+                            "modifications demandees dans docker-compose.yml ou .env."}
 
     # --- Demande d'action : rien n'est execute sans Louis -------------------
     @app.post("/demande")
