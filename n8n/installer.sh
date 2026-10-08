@@ -63,6 +63,10 @@ for wf in workflows/*.json; do
   remplacer "$wf" "$IMPORT_DIR/workflows/$(basename "$wf")"
 done
 
+# Le conteneur n8n tourne en utilisateur "node" (uid 1000) : il doit pouvoir
+# lire les fichiers temporaires, qui restent fermes aux autres utilisateurs.
+if [ "$(id -u)" = 0 ]; then chown -R 1000:1000 "$IMPORT_DIR"; fi
+
 echo "> Import des identifiants"
 $N8N_CMD import:credentials --input="$IMPORT_IN_N8N/credentials.json"
 echo "> Import des workflows"

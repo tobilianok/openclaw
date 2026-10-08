@@ -180,7 +180,8 @@ sed -e 's/JETON_SALON_MAJORDOME/<jeton salon Majordome>/g' \
 openclaw config patch --file /tmp/majordome.json5
 openclaw config validate
 
-# Service systemd + demarrage
+# Service systemd (utilisateur) + demarrage, actif meme sans session ouverte
+sudo loginctl enable-linger "$USER"
 openclaw gateway install
 openclaw gateway restart
 openclaw doctor
@@ -221,7 +222,7 @@ docker compose up -d
 
 # Identifiants + workflows en une commande
 cp majordome.env.example majordome.env && chmod 600 majordome.env && nano majordome.env
-./installer.sh
+sudo ./installer.sh
 docker compose restart n8n
 rm majordome.env
 ```
