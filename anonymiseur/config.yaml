@@ -44,7 +44,9 @@ routes:
   # mistral-large-latest n'est pas inclus dans le plan gratuit Experiment.
   nvidia-gptoss:  {fournisseur: nvidia, modele: openai/gpt-oss-120b, contexte: 120000, rpm: 35, rpd: 9000}
   nvidia-nemotron: {fournisseur: nvidia, modele: nvidia/nemotron-3-super-120b-a12b, contexte: 120000, rpm: 35, rpd: 9000}
-  groq-gptoss:    {fournisseur: groq, modele: openai/gpt-oss-20b, contexte: 7000, rpm: 25, tpm: 7500, rpd: 900}
+  # Groq gratuit : 1000 requetes/jour et 8000 tokens/minute par modele (verifie le 08/10)
+  groq-gptoss-120b: {fournisseur: groq, modele: openai/gpt-oss-120b, contexte: 7000, rpm: 25, tpm: 7500, rpd: 950}
+  groq-gptoss:    {fournisseur: groq, modele: openai/gpt-oss-20b, contexte: 7000, rpm: 25, tpm: 7500, rpd: 950}
   github-mini:    {fournisseur: github, modele: openai/gpt-4.1-mini, contexte: 7500, rpm: 12, rpd: 140}
   openrouter-gptoss: {fournisseur: openrouter, modele: "openai/gpt-oss-120b:free", contexte: 120000, rpm: 15, rpd: 45}
 
@@ -55,7 +57,7 @@ profils:
   # Briefing, bilan, analyses : les meilleurs modeles d'abord
   reflexion: [gemini-recent, mistral-magistral, nvidia-nemotron, gemini-flash, mistral-medium, gemini-flash-3]
   # Petites taches sans outils : les plus rapides d'abord
-  rapide: [groq-gptoss, github-mini, gemini-lite, mistral-small]
+  rapide: [groq-gptoss-120b, groq-gptoss, github-mini, gemini-lite, mistral-small]
 
 # Pause d'une route apres un refus sans indication de duree (secondes)
 pause_apres_refus_s: 60
