@@ -186,10 +186,12 @@ class Routeur:
         # refus rapide qu'aucune reponse.
         return possibles or en_attente
 
-    async def appeler(self, profil: str, corps: dict, exclure_fournisseurs: set[str] = frozenset()) -> tuple[dict, Route]:
+    async def appeler(self, profil: str, corps: dict, exclure_fournisseurs: set[str] = frozenset(),
+                      routes: list[Route] | None = None) -> tuple[dict, Route]:
         tokens = estimer_tokens(corps)
         erreurs = []
-        routes = self.candidates(profil, tokens, exclure_fournisseurs)
+        if routes is None:
+            routes = self.candidates(profil, tokens, exclure_fournisseurs)
         if not routes:
             raise EchecRoutage([f"aucune route du profil {profil} ne peut prendre ~{tokens} tokens maintenant"])
         for r in routes:
@@ -266,22 +268,27 @@ class Routeur:
         taches, choisies = [], []
         tokens = estimer_tokens(a_plat)
         for profil in membres:
-            # D'abord un autre fournisseur ; a defaut, un autre modele.
+            # D'abord un autre fournisseur ; a defaut, un autre modele. Si le
+            # modele choisi echoue, les suivants de la liste prennent le relais.
             options = self.candidates(profil, tokens, deja) or [
                 r for r in self.candidates(profil, tokens) if r.nom not in routes_prises]
-            for r in options:
-                deja.add(r.fournisseur)
-                routes_prises.add(r.nom)
-                choisies.append(r)
-                taches.append(self.appeler(r.nom, a_plat))
-                break
+            options = [r for r in options if r.nom not in routes_prises]
+            if not options:
+                continue
+            r = options[0]
+            deja.add(r.fournisseur)
+            routes_prises.add(r.nom)
+            choisies.append(r)
+            taches.append(self.appeler(profil, a_plat, routes=options[:3]))
         resultats = await asyncio.gather(*taches, return_exceptions=True)
         avis = [(route1.nom, premiere["choices"][0]["message"].get("content") or "")]
         for r, res in zip(choisies, resultats):
             if isinstance(res, Exception):
-                log.warning("conseil : %s indisponible (%s)", r.nom, res)
+                log.warning("conseil : %s et ses remplacants indisponibles (%s)", r.nom, res)
                 continue
-            avis.append((r.nom, res[0]["choices"][0]["message"].get("content") or ""))
+            if res[1].nom in {nom for nom, _ in avis}:
+                continue  # un remplacant est tombe sur un modele deja entendu
+            avis.append((res[1].nom, res[0]["choices"][0]["message"].get("content") or ""))
         if len(avis) < 2:
             return premiere, route1.nom
         question = derniere_question(corps["messages"])

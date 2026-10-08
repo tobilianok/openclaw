@@ -46,7 +46,7 @@ routes:
   nvidia-glm:     {fournisseur: nvidia, modele: z-ai/glm-5.3, contexte: 120000, rpm: 35, rpd: 9000}
   nvidia-nemotron: {fournisseur: nvidia, modele: nvidia/nemotron-3-super-120b-a12b, contexte: 120000, rpm: 35, rpd: 9000}
   nvidia-nemotron-ultra: {fournisseur: nvidia, modele: nvidia/nemotron-3-ultra-550b-a55b, contexte: 120000, rpm: 35, rpd: 9000}
-  nvidia-kimi:    {fournisseur: nvidia, modele: moonshotai/kimi-k3, contexte: 120000, rpm: 35, rpd: 9000, delai_s: 150}
+  nvidia-kimi:    {fournisseur: nvidia, modele: moonshotai/kimi-k3, contexte: 120000, rpm: 35, rpd: 9000, delai_s: 60}
   nvidia-gptoss20: {fournisseur: nvidia, modele: openai/gpt-oss-20b, contexte: 120000, rpm: 35, rpd: 9000}
   # Groq gratuit : 1000 requetes/jour et 8000 tokens/minute par modele (verifie le 08/10)
   groq-gptoss-120b: {fournisseur: groq, modele: openai/gpt-oss-120b, contexte: 7000, rpm: 25, tpm: 7500, rpd: 950}
@@ -59,7 +59,7 @@ profils:
   # Conversation et outils (le majordome au quotidien)
   auto: [gemini-flash, nvidia-glm, nvidia-nemotron, gemini-flash-3, mistral-medium, mistral-small, openrouter-gptoss]
   # Briefing, bilan, analyses : les meilleurs modeles d'abord
-  reflexion: [nvidia-kimi, nvidia-nemotron-ultra, gemini-recent, nvidia-glm, gemini-flash, mistral-magistral, mistral-medium]
+  reflexion: [nvidia-nemotron-ultra, gemini-recent, nvidia-glm, nvidia-kimi, gemini-flash, mistral-magistral, mistral-medium]
   # Petites taches sans outils : les plus rapides d'abord
   rapide: [groq-gptoss-120b, groq-gptoss, nvidia-gptoss20, github-mini, gemini-lite, mistral-small]
 

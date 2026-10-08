@@ -141,6 +141,8 @@ def test_conseil_tolere_un_membre_en_panne(faux):
     faux.statuts["c"] = (500, "panne")
     rep, nom = lancer(r.conseil(CORPS, premiere, route1, ["reflexion", "auto"], "reflexion"))
     assert rep["choices"][0]["message"]["content"].startswith("SYNTHESE")
+    # c1 en panne : remplace par b1 (suivant du profil reflexion), conseil a 2 avis + synthese par b1
+    assert nom.startswith("conseil[a1+b1]")
 
 
 def test_aplatir_les_appels_d_outils():
