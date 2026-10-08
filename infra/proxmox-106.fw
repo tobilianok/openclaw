@@ -15,7 +15,10 @@ IN ACCEPT -source 192.168.1.12 -p tcp -dport 18789
 IN ACCEPT -source 192.168.1.14 -p tcp -dport 18789
 # Metriques de l'anonymiseur pour Prometheus
 IN ACCEPT -source 192.168.1.19 -p tcp -dport 8090
-# Administration depuis ton PC (SSH + interface OpenClaw)
+# Tailscale : liaisons directes WireGuard (le SSH via Tailscale passe dans le
+# tunnel, le pare-feu Proxmox ne le voit pas)
+IN ACCEPT -p udp -dport 41641
+# Administration depuis ton PC sur le LAN (SSH + interface OpenClaw)
 IN ACCEPT -source 192.168.1.29 -p tcp -dport 22
 IN ACCEPT -source 192.168.1.29 -p tcp -dport 18789
 
@@ -32,7 +35,9 @@ OUT DROP -dest 10.0.0.0/8
 OUT DROP -dest 172.16.0.0/12
 OUT DROP -dest 192.168.0.0/16
 
-# --- Sortant vers Internet (API des IA gratuites, mises a jour) ---
+# --- Sortant vers Internet (API des IA gratuites, mises a jour, Tailscale) ---
 OUT ACCEPT -p tcp -dport 443
 OUT ACCEPT -p tcp -dport 80
 OUT ACCEPT -p udp -dport 123
+# Tailscale (WireGuard, STUN) : ports UDP variables vers Internet
+OUT ACCEPT -p udp

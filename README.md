@@ -154,7 +154,7 @@ augmente les quotas, et il suffit de laisser une clé vide pour le désactiver.
 
 1. Crée la VM 106 :
    - Ubuntu Server 26.04 ;
-   - 2 vCPU, **6 Go de RAM** (le modèle de langue de l'anonymiseur prend
+   - 2 vCPU, **6 Go de RAM** (6144 Mo) (le modèle de langue de l'anonymiseur prend
      environ 1 Go), 40 Go de disque sur `vmstorage` ;
    - carte réseau sur `vmbr0`, IP fixe **192.168.1.16**.
      (Attention : .16 était l'IP prévue pour HAOS ; choisis-en une autre pour lui.)
