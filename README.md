@@ -12,7 +12,7 @@ vraies valeurs dans les réponses. Rien ne tourne sur ton PC.
  Louis (téléphone, partout)
    │  application Nextcloud Talk
    ▼
- Nextcloud (.12) ──webhook signé──▶ VM 106 majordome (.22)
+ Nextcloud (.12) ──webhook signé──▶ VM 106 majordome (.16)
                                    ┌──────────────────────────────────────────────┐
                                    │ OpenClaw (aucune clé d'IA)                    │
                                    │    │ texte en clair                           │
@@ -156,7 +156,8 @@ augmente les quotas, et il suffit de laisser une clé vide pour le désactiver.
    - Ubuntu Server 26.04 ;
    - 2 vCPU, **6 Go de RAM** (le modèle de langue de l'anonymiseur prend
      environ 1 Go), 40 Go de disque sur `vmstorage` ;
-   - carte réseau sur `vmbr0`, IP fixe **192.168.1.22**.
+   - carte réseau sur `vmbr0`, IP fixe **192.168.1.16**.
+     (Attention : .16 était l'IP prévue pour HAOS ; choisis-en une autre pour lui.)
 2. Installe Docker : `curl -fsSL https://get.docker.com | sh`.
 3. Copie `infra/proxmox-106.fw` dans `/etc/pve/firewall/106.fw` sur le
    ML150, puis active le pare-feu dans VM > Pare-feu > Options et sur `net0`.
@@ -212,13 +213,13 @@ sudo -u www-data php occ config:system:set allow_local_remote_servers --value=tr
 
 SECRET=$(openssl rand -hex 32); echo "$SECRET"   # à garder pour l'étape 7
 sudo -u www-data php occ talk:bot:install "Majordome" "$SECRET" \
-  "http://192.168.1.22:18789/nextcloud-talk-webhook" \
+  "http://192.168.1.16:18789/nextcloud-talk-webhook" \
   --feature webhook --feature response --feature reaction
 sudo -u www-data php occ talk:bot:list
 ```
 
 Si Talk refuse une URL en `http://`, publie la route dans NPM :
-- un hôte interne `majordome.louisrousseaux.fr` vers `192.168.1.22:18789` ;
+- un hôte interne `majordome.louisrousseaux.fr` vers `192.168.1.16:18789` ;
 - avec Let's Encrypt et une liste d'accès LAN ;
 - puis utilise cette URL en `https://` dans la commande `talk:bot:install`.
 

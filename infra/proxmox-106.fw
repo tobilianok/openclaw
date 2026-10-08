@@ -1,4 +1,4 @@
-# Pare-feu Proxmox de la VM 106 "majordome" (192.168.1.22).
+# Pare-feu Proxmox de la VM 106 "majordome" (192.168.1.16).
 # A copier dans /etc/pve/firewall/106.fw, puis activer le pare-feu sur la
 # carte reseau de la VM (Materiel > net0 > Pare-feu) et dans Options.
 

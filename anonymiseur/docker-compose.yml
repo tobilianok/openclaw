@@ -1,4 +1,4 @@
-# /opt/stacks/anonymiseur sur la VM majordome (192.168.1.22).
+# /opt/stacks/anonymiseur sur la VM majordome (192.168.1.16).
 # OpenClaw l'appelle en local (127.0.0.1:8090) ; Prometheus (.19) lit /metrics.
 services:
   anonymiseur:

@@ -1,4 +1,4 @@
-// Configuration OpenClaw du majordome, sur la VM 106 "majordome" (192.168.1.22).
+// Configuration OpenClaw du majordome, sur la VM 106 "majordome" (192.168.1.16).
 // Validee avec OpenClaw 2026.9.8. A appliquer avec `openclaw config patch`
 // (voir README, etape 7), pas en copiant le fichier par-dessus.
 //
