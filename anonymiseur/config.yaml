@@ -65,6 +65,9 @@ profils:
   reflexion: [nvidia-nemotron-ultra, gemini-recent, nvidia-glm, gemini-flash, nvidia-kimi, mistral-magistral, mistral-medium]
   # Petites taches sans outils : les plus rapides d'abord
   rapide: [groq-gptoss-120b, groq-gptoss, nvidia-gptoss20, gemini-lite, gemini-lite-2, github-mini, mistral-small]
+  # Synthese du conseil : petite requete (question + avis), Groq la fait en
+  # moins d'une seconde ; repli sur les gros modeles si elle est trop longue.
+  synthese: [groq-gptoss-120b, nvidia-glm, gemini-recent, gemini-flash]
 
 # Pause d'une route apres un refus sans indication de duree (secondes)
 pause_apres_refus_s: 60
@@ -76,7 +79,7 @@ pause_apres_refus_s: 60
 conseil:
   declencheur: "!conseil\\b"
   membres: [reflexion, auto]     # profils des 2 avis supplementaires
-  synthese: reflexion
+  synthese: synthese
 
 # --- Anonymisation -----------------------------------------------------------
 # Detection automatique (spaCy, francais). Les personnes sont toujours
