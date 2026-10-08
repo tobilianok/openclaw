@@ -136,7 +136,14 @@ class Anonymiseur:
         for p in dictionnaire.get("personnes", []):
             self._groupe("PERSONNE", p)
         for t in dictionnaire.get("termes", []):
-            self._groupe(t.get("categorie", "TERME").upper(), t)
+            categorie = t.get("categorie", "TERME").upper()
+            if "affichage" in t or "jeton" in t:
+                self._groupe(categorie, t)
+            else:
+                # Sans "affichage", chaque forme est distincte et revient telle
+                # quelle : famillerousseaux.fr ne doit pas redevenir louisrousseaux.fr.
+                for f in t.get("formes", []):
+                    self._groupe(categorie, {"formes": [f]}, propre=True)
         # Pas de lettre ni "@" juste avant : "auth.louisrousseaux.fr" est bien
         # masque (sous-domaine), et une adresse e-mail entiere reste prise par
         # la regle EMAIL, plus longue.
@@ -146,12 +153,12 @@ class Anonymiseur:
             if formes else None
         )
 
-    def _groupe(self, categorie: str, entree: dict) -> None:
+    def _groupe(self, categorie: str, entree: dict, propre: bool = False) -> None:
         formes = [f for f in entree.get("formes", []) if f.strip()]
         if not formes:
             return
         jeton = self.coffre.enregistrer_groupe(
-            categorie, formes, entree.get("affichage", formes[0]), entree.get("jeton"))
+            categorie, formes, entree.get("affichage", formes[0]), entree.get("jeton"), propre)
         for f in formes:
             self._formes[normaliser(f)] = jeton
 

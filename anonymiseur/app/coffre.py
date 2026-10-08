@@ -58,13 +58,18 @@ class Coffre:
             return j
 
     def enregistrer_groupe(self, categorie: str, formes: list[str], affichage: str,
-                           jeton_fixe: str | None = None) -> str:
-        """Plusieurs formes (ex: 'Louis', 'Louis Rousseaux') -> un seul jeton."""
+                           jeton_fixe: str | None = None, propre: bool = False) -> str:
+        """Plusieurs formes (ex: 'Louis', 'Louis Rousseaux') -> un seul jeton.
+
+        propre=True : le jeton ne doit appartenir qu'a cette forme (un ancien
+        jeton partage avec d'autres formes n'est pas repris)."""
         with self._verrou:
             j = f"[{jeton_fixe}]" if jeton_fixe else None
             if not j:
                 for f in formes:
                     j = self._par_cle.get(f"{categorie}:{normaliser(f)}")
+                    if j and propre and normaliser(self._par_jeton.get(j, "")) != normaliser(affichage):
+                        j = None
                     if j:
                         break
             if not j:

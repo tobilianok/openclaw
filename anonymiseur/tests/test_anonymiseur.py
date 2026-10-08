@@ -13,10 +13,11 @@ from app.proxy import creer_app
 DICO = {
     "personnes": [
         {"jeton": "UTILISATEUR", "affichage": "Louis",
-         "formes": ["Louis Rousseaux", "Louis", "Rousseaux", "tobilianok"]},
+         "formes": ["Louis Rousseaux", "Louis", "Rousseaux"]},
         {"affichage": "Marie", "formes": ["Marie Rousseaux", "Marie"]},
     ],
-    "termes": [{"categorie": "DOMAINE", "formes": ["louisrousseaux.fr"]}],
+    "termes": [{"categorie": "DOMAINE", "formes": ["louisrousseaux.fr", "famillerousseaux.fr"]},
+               {"categorie": "IDENTIFIANT", "formes": ["tobilianok"]}],
     "jamais": ["Proxmox", "Jellyfin", "Nextcloud"],
 }
 
@@ -282,3 +283,21 @@ def test_horodatage_ajoute_au_prompt_systeme():
     assert len(m) == 2 and m[0]["content"].endswith("jeudi 8 octobre 2026, 15:59.")
     m = ajouter_horodatage([{"role": "user", "content": "x"}], t)
     assert m[0]["role"] == "system" and "jeudi 8 octobre 2026" in m[0]["content"]
+
+
+def test_chemins_et_domaines_reviennent_a_l_identique(anon):
+    texte = "cd /home/tobilianok/immich-stack ; voir https://nextcloud.famillerousseaux.fr et auth.louisrousseaux.fr"
+    envoye = anon.anonymiser(texte)
+    for secret in ["tobilianok", "famillerousseaux", "louisrousseaux"]:
+        assert secret not in envoye
+    assert anon.retablir(envoye) == texte
+
+
+def test_ancien_coffre_avec_domaines_groupes(tmp_path, nlp):
+    """Coffre cree avec l'ancien comportement (formes groupees) : chacune retrouve sa valeur."""
+    coffre = Coffre(str(tmp_path / "c.db"))
+    coffre.enregistrer_groupe("DOMAINE", ["louisrousseaux.fr", "famillerousseaux.fr"], "louisrousseaux.fr")
+    coffre.enregistrer_groupe("PERSONNE", ["Louis", "tobilianok"], "Louis", "UTILISATEUR")
+    a = Anonymiseur(coffre, DICO, {"PERSONNE": True}, nlp)
+    texte = "nextcloud.famillerousseaux.fr, louisrousseaux.fr et /home/tobilianok"
+    assert a.retablir(a.anonymiser(texte)) == texte

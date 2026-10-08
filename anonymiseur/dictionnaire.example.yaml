@@ -9,12 +9,17 @@
 personnes:
   - jeton: UTILISATEUR          # toi : l'IA ne voit que [UTILISATEUR]
     affichage: Louis
-    formes: [Louis Rousseaux, Louis, Rousseaux, tobilianok]
+    formes: [Louis Rousseaux, Louis, Rousseaux]
   # - affichage: Marie
   #   formes: [Marie Rousseaux, Marie]
 
 # Autres termes identifiants : adresse, employeur, domaines, plaques...
+# Sans "affichage", chaque forme a son propre pseudonyme et revient telle
+# quelle (indispensable pour les identifiants et domaines dans les chemins,
+# URL et commandes). Avec "affichage", les formes sont regroupees.
 termes:
+  - categorie: IDENTIFIANT     # ton login : /home/tobilianok doit revenir intact
+    formes: [tobilianok]
   - categorie: DOMAINE
     formes: [louisrousseaux.fr, famillerousseaux.fr]
   # - categorie: ADRESSE
