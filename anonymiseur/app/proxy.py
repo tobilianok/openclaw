@@ -14,6 +14,8 @@ import os
 import re
 import time
 import uuid
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 import httpx
 import yaml
@@ -56,6 +58,7 @@ def creer_app(config: dict | None = None, nlp=None, client: httpx.AsyncClient | 
     conseil = config.get("conseil") or {}
     declencheur = re.compile(conseil.get("declencheur", r"!conseil\b"), re.IGNORECASE)
     journal = config.get("journal_envois")
+    fuseau = ZoneInfo(config.get("fuseau", "Europe/Paris"))
 
     app = FastAPI(title="Anonymiseur du majordome")
     app.state.anon = anon
@@ -96,7 +99,8 @@ def creer_app(config: dict | None = None, nlp=None, client: httpx.AsyncClient | 
         corps = {k: v for k, v in demande.items() if k in CHAMPS_TRANSMIS}
         if "max_tokens" not in corps and demande.get("max_completion_tokens"):
             corps["max_tokens"] = demande["max_completion_tokens"]
-        corps["messages"] = [anonymiser_message(anon, m) for m in demande.get("messages", [])]
+        corps["messages"] = ajouter_horodatage([anonymiser_message(anon, m) for m in demande.get("messages", [])],
+                                               datetime.now(fuseau))
         if journal:
             with open(journal, "a", encoding="utf-8") as f:
                 f.write(json.dumps({"t": time.strftime("%F %T"), "messages": corps["messages"]},
@@ -153,6 +157,20 @@ def anonymiser_message(anon: Anonymiseur, message: dict) -> dict:
         if champ in m and m.get("role") != "tool":
             m.pop(champ)
     return m
+
+
+JOURS = ["lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanche"]
+MOIS = ["janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre",
+        "octobre", "novembre", "décembre"]
+
+
+def ajouter_horodatage(messages: list[dict], maintenant: datetime) -> list[dict]:
+    """Donne l'heure reelle aux IA : sans elle, elles inventent des dates."""
+    ligne = (f"Date et heure actuelles (heure locale) : {JOURS[maintenant.weekday()]} {maintenant.day} "
+             f"{MOIS[maintenant.month - 1]} {maintenant.year}, {maintenant:%H:%M}.")
+    if messages and messages[0].get("role") in ("system", "developer") and isinstance(messages[0].get("content"), str):
+        return [{**messages[0], "content": messages[0]["content"] + "\n\n" + ligne}, *messages[1:]]
+    return [{"role": "system", "content": ligne}, *messages]
 
 
 def retablir_message(anon: Anonymiseur, message: dict) -> None:

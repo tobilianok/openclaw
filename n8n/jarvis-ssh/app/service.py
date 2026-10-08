@@ -24,7 +24,9 @@ import secrets
 import shlex
 import sqlite3
 import time
+from datetime import datetime
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 import httpx
 import yaml
@@ -171,6 +173,7 @@ def creer_app(config: dict | None = None, executeur: Executeur | None = None,
     protections = [(set(p["machines"]), re.compile(p["motif"], re.IGNORECASE), p["raison"])
                    for p in config.get("protections") or []]
     expiration = 60 * int(config.get("expiration_minutes", 30))
+    fuseau = ZoneInfo(config.get("fuseau", "Europe/Paris"))  # heures affichees a Louis
 
     app = FastAPI(title="jarvis-ssh")
     app.state.demandes = demandes
@@ -247,7 +250,7 @@ def creer_app(config: dict | None = None, executeur: Executeur | None = None,
                            expire=time.time() + expiration)
         lien = f"{url_publique}/d/{d['id']}?j={d['jeton']}"
         bloc = "\n".join(commandes)
-        heure = time.strftime("%H:%M", time.localtime(d["expire"]))
+        heure = datetime.fromtimestamp(d["expire"], fuseau).strftime("%H:%M")
         await talk.poster(
             f"🔐 **Jarvis demande ton accord** — action `#{d['id']}` sur **{nom}** ({m['hote']})\n\n"
             f"**Pourquoi** : {explication}\n\n"

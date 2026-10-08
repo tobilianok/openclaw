@@ -41,3 +41,4 @@ protections:
 
 # Une demande non traitee expire au bout de :
 expiration_minutes: 30
+fuseau: Europe/Paris

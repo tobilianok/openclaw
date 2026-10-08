@@ -97,6 +97,9 @@ etat_quotas: /data/quotas.json
 # Ton dictionnaire personnel (voir dictionnaire.example.yaml)
 dictionnaire: /config/dictionnaire.yaml
 
+# Fuseau de l'heure donnee aux IA (sans elle, elles inventent la date)
+fuseau: Europe/Paris
+
 # Journal de ce qui part reellement vers le cloud, pour verifier
 # l'anonymisation. A desactiver (null) une fois rassure.
 journal_envois: /data/envois.jsonl

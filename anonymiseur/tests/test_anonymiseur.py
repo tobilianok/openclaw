@@ -271,3 +271,14 @@ def test_domaine_avec_sous_domaine(anon):
     sortie = anon.anonymiser(texte)
     assert "louisrousseaux" not in sortie, sortie
     assert anon.retablir(sortie) == texte
+
+
+def test_horodatage_ajoute_au_prompt_systeme():
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+    from app.proxy import ajouter_horodatage
+    t = datetime(2026, 10, 8, 15, 59, tzinfo=ZoneInfo("Europe/Paris"))
+    m = ajouter_horodatage([{"role": "system", "content": "Regles"}, {"role": "user", "content": "x"}], t)
+    assert len(m) == 2 and m[0]["content"].endswith("jeudi 8 octobre 2026, 15:59.")
+    m = ajouter_horodatage([{"role": "user", "content": "x"}], t)
+    assert m[0]["role"] == "system" and "jeudi 8 octobre 2026" in m[0]["content"]
