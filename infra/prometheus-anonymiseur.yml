@@ -1,0 +1,30 @@
+# A ajouter a ta config Prometheus (VM monitoring .19).
+
+# 1) Dans prometheus.yml, section scrape_configs :
+#
+#   - job_name: anonymiseur
+#     static_configs:
+#       - targets: ["192.168.1.22:8090"]
+#
+# 2) Regles d'alerte (fichier de regles charge par Prometheus) :
+groups:
+  - name: majordome
+    rules:
+      - alert: MajordomeAnonymiseurInjoignable
+        expr: up{job="anonymiseur"} == 0
+        for: 5m
+        labels: {severity: critical}
+        annotations:
+          summary: "L'anonymiseur du majordome ne repond plus : le majordome est muet."
+      - alert: MajordomeToutesIASaturees
+        expr: min(anonymiseur_route_en_pause) == 1
+        for: 15m
+        labels: {severity: warning}
+        annotations:
+          summary: "Toutes les IA gratuites du majordome sont en pause (quotas ou pannes)."
+      - alert: MajordomeQuotaJourBientotEpuise
+        expr: anonymiseur_quota_jour_utilise / anonymiseur_quota_jour_max > 0.9
+        for: 10m
+        labels: {severity: warning}
+        annotations:
+          summary: "Route {{ $labels.route }} a plus de 90 % de son quota du jour."

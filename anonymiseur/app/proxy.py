@@ -11,16 +11,18 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import time
 import uuid
 
 import httpx
 import yaml
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.responses import JSONResponse, PlainTextResponse, StreamingResponse
 
 from .coffre import Coffre
 from .detection import Anonymiseur
+from .routeur import EchecRoutage, Routeur, derniere_question
 
 log = logging.getLogger("anonymiseur")
 
@@ -37,60 +39,6 @@ def charger_yaml(chemin: str) -> dict:
         return yaml.safe_load(f) or {}
 
 
-class Fournisseurs:
-    """Fournisseurs gratuits, essayes dans l'ordre, avec pause apres un refus."""
-
-    def __init__(self, config: dict, client: httpx.AsyncClient):
-        self.client = client
-        self.liste = {}
-        for nom, f in (config.get("fournisseurs") or {}).items():
-            cle = os.environ.get(f.get("cle_env", ""), "")
-            if cle:
-                self.liste[nom] = {**f, "cle": cle}
-            else:
-                log.warning("fournisseur %s ignore : %s vide", nom, f.get("cle_env"))
-        self.ordre = [n for n in config.get("ordre_auto", list(self.liste)) if n in self.liste]
-        self.pause_jusqua: dict[str, float] = {}
-        self.pause_defaut = int(config.get("pause_apres_refus_s", 60))
-
-    def candidats(self, modele: str) -> list[str]:
-        if modele in self.liste:
-            return [modele]
-        maintenant = time.time()
-        dispo = [n for n in self.ordre if self.pause_jusqua.get(n, 0) <= maintenant]
-        # Si tout le monde est en pause, on retente quand meme dans l'ordre.
-        return dispo or list(self.ordre)
-
-    async def appeler(self, modele: str, corps: dict) -> tuple[dict, str]:
-        erreurs = []
-        for nom in self.candidats(modele):
-            f = self.liste[nom]
-            envoi = {**corps, "model": f["modele"], "stream": False}
-            try:
-                r = await self.client.post(
-                    f["url"].rstrip("/") + "/chat/completions",
-                    json=envoi,
-                    headers={"Authorization": f"Bearer {f['cle']}"},
-                    timeout=f.get("delai_s", 90),
-                )
-            except httpx.HTTPError as e:
-                erreurs.append(f"{nom}: {type(e).__name__}")
-                self.pause_jusqua[nom] = time.time() + self.pause_defaut
-                continue
-            if r.status_code == 200:
-                return r.json(), nom
-            pause = self.pause_defaut
-            if r.status_code == 429:
-                try:
-                    pause = max(pause, int(float(r.headers.get("retry-after", 0))))
-                except ValueError:
-                    pass
-            self.pause_jusqua[nom] = time.time() + pause
-            erreurs.append(f"{nom}: HTTP {r.status_code} {r.text[:200]}")
-            log.warning("fournisseur %s en echec (HTTP %s), suivant", nom, r.status_code)
-        raise HTTPException(status_code=502, detail={"error": {"message": "; ".join(erreurs) or "aucun fournisseur"}})
-
-
 def creer_app(config: dict | None = None, nlp=None, client: httpx.AsyncClient | None = None) -> FastAPI:
     config = config if config is not None else charger_yaml(os.environ.get("ANONYMISEUR_CONFIG", "config.yaml"))
     dictionnaire = charger_yaml(os.environ.get("ANONYMISEUR_DICTIONNAIRE", config.get("dictionnaire", "")))
@@ -104,12 +52,14 @@ def creer_app(config: dict | None = None, nlp=None, client: httpx.AsyncClient | 
 
     coffre = Coffre(config.get("coffre", "/data/coffre.db"))
     anon = Anonymiseur(coffre, dictionnaire, config.get("ner", {}), nlp)
-    fournisseurs = Fournisseurs(config, client or httpx.AsyncClient())
+    routeur = Routeur(config, client or httpx.AsyncClient(), config.get("etat_quotas"))
+    conseil = config.get("conseil") or {}
+    declencheur = re.compile(conseil.get("declencheur", r"!conseil\b"), re.IGNORECASE)
     journal = config.get("journal_envois")
 
     app = FastAPI(title="Anonymiseur du majordome")
     app.state.anon = anon
-    app.state.fournisseurs = fournisseurs
+    app.state.routeur = routeur
 
     def verifier(request: Request):
         if request.headers.get("authorization") != f"Bearer {jeton_acces}":
@@ -117,12 +67,18 @@ def creer_app(config: dict | None = None, nlp=None, client: httpx.AsyncClient | 
 
     @app.get("/sante")
     async def sante():
-        return {"ok": True, "fournisseurs": list(fournisseurs.liste), "pseudonymes": coffre.taille()}
+        return {"ok": True, "routes": list(routeur.routes), "profils": routeur.profils,
+                "pseudonymes": coffre.taille()}
+
+    @app.get("/metrics", response_class=PlainTextResponse)
+    async def metriques():
+        # Sans donnees personnelles : noms de routes et compteurs seulement.
+        return routeur.metriques() + f"anonymiseur_pseudonymes {coffre.taille()}\n"
 
     @app.get("/v1/models")
     async def modeles(request: Request):
         verifier(request)
-        noms = ["auto", *fournisseurs.liste]
+        noms = [*routeur.profils, "conseil"]
         return {"object": "list", "data": [{"id": n, "object": "model", "owned_by": "anonymiseur"} for n in noms]}
 
     @app.post("/v1/anonymiser")
@@ -146,10 +102,26 @@ def creer_app(config: dict | None = None, nlp=None, client: httpx.AsyncClient | 
                 f.write(json.dumps({"t": time.strftime("%F %T"), "messages": corps["messages"]},
                                    ensure_ascii=False) + "\n")
 
-        reponse, nom = await fournisseurs.appeler(demande.get("model", "auto"), corps)
+        modele = demande.get("model", "auto")
+        veut_conseil = modele == "conseil" or bool(declencheur.search(derniere_question(demande.get("messages", []))))
+        profil = "auto" if modele == "conseil" else modele
+        try:
+            reponse, route = await routeur.appeler(profil, corps)
+            nom = route.nom
+            message = (reponse.get("choices") or [{}])[0].get("message") or {}
+            # Le conseil ne s'applique qu'a la reponse finale (pas aux appels d'outils).
+            if veut_conseil and not message.get("tool_calls"):
+                reponse, nom = await routeur.conseil(
+                    corps, reponse, route, conseil.get("membres", ["reflexion", "auto"]),
+                    conseil.get("synthese", "reflexion"))
+        except EchecRoutage as e:
+            log.error("aucune IA disponible : %s", e)
+            return JSONResponse(status_code=502, content={"error": {
+                "message": "Aucune IA gratuite disponible pour le moment (quotas ou pannes) : " + str(e),
+                "type": "upstream_unavailable"}})
         for choix in reponse.get("choices", []):
             retablir_message(anon, choix.get("message") or {})
-        reponse["model"] = f"{demande.get('model', 'auto')} ({nom})"
+        reponse["model"] = f"{modele} ({nom})"
         log.info("reponse via %s", nom)
         if not flux:
             return JSONResponse(reponse)
@@ -162,11 +134,13 @@ def creer_app(config: dict | None = None, nlp=None, client: httpx.AsyncClient | 
 def anonymiser_message(anon: Anonymiseur, message: dict) -> dict:
     m = dict(message)
     contenu = m.get("content")
+    strict = m.get("role") in ("system", "developer")
+    utilisateur = m.get("role") == "user"
     if isinstance(contenu, str):
-        m["content"] = anon.anonymiser(contenu)
+        m["content"] = anon.anonymiser(contenu, strict, utilisateur)
     elif isinstance(contenu, list):
         m["content"] = [
-            {**p, "text": anon.anonymiser(p["text"])} if p.get("type") == "text" and "text" in p else p
+            {**p, "text": anon.anonymiser(p["text"], strict, utilisateur)} if p.get("type") == "text" and "text" in p else p
             for p in contenu
         ]
     if m.get("tool_calls"):

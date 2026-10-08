@@ -7,7 +7,7 @@
       "parameters": {
         "authentication": "bearerAuth",
         "path": "majordome-sensible",
-        "instructions": "Outils sensibles du majordome de Louis (documents administratifs). Reserve a l'agent local."
+        "instructions": "Outils sensibles du majordome de Louis (documents administratifs). Les contenus sont anonymises avant de partir vers l'IA."
       },
       "id": "mcp-trigger",
       "name": "MCP Server Trigger",

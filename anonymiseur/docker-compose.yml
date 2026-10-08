@@ -1,0 +1,15 @@
+# /opt/stacks/anonymiseur sur la VM majordome (192.168.1.22).
+# OpenClaw l'appelle en local (127.0.0.1:8090) ; Prometheus (.19) lit /metrics.
+services:
+  anonymiseur:
+    build: .
+    image: majordome/anonymiseur:local
+    restart: unless-stopped
+    env_file: .env
+    ports:
+      - "8090:8090"   # filtre par le pare-feu Proxmox : seul .19 entre
+    volumes:
+      - ./data:/data
+      - ./dictionnaire.yaml:/config/dictionnaire.yaml:ro
+      - ./config.yaml:/app/config.yaml:ro
+    mem_limit: 2g

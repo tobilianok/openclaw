@@ -182,7 +182,7 @@ outils_wf = serveur_mcp(
     outils,
 )
 
-# --- Serveur MCP "majordome-sensible" : reserve a l'agent prive (local) ----
+# --- Serveur MCP "majordome-sensible" : documents (anonymises a la sortie) -
 sensibles = [
     outil_http(
         "paperless_recherche", [-100, 300],
@@ -208,7 +208,7 @@ sensibles = [
 sensible_wf = serveur_mcp(
     "majSensibleMcp01", "Majordome - sensible (MCP)", "majordome-sensible",
     "Outils sensibles du majordome de Louis (documents administratifs). "
-    "Reserve a l'agent local.",
+    "Les contenus sont anonymises avant de partir vers l'IA.",
     sensibles,
 )
 
@@ -230,6 +230,8 @@ def appel_majordome(nom, consigne, position):
         "message": consigne,
         "name": nom,
         "agentId": "majordome",
+        # Les meilleurs modeles gratuits pour le briefing et le bilan
+        "model": "anonymiseur/reflexion",
         "channel": "nextcloud-talk",
         "to": "room:@@TALK_ROOM_MAJORDOME@@",
     }
@@ -266,8 +268,8 @@ BRIEFING = (
 )
 BILAN = (
     "C'est l'heure du bilan du soir. Relis ta note du jour dans memory/, mets a "
-    "jour USER.md et MEMORY.md avec ce que tu as appris aujourd'hui (rien de "
-    "sensible). Puis envoie a Louis un message tres court : ce qui l'attend "
+    "jour USER.md et MEMORY.md avec ce que tu as appris aujourd'hui (jamais de "
+    "mots de passe). Puis envoie a Louis un message tres court : ce qui l'attend "
     "demain (agenda) et, seulement s'il y en a, une alerte infra ou un point "
     "en suspens. S'il n'y a rien a signaler, dis-le en une ligne."
 )

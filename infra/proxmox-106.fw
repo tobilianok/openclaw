@@ -13,26 +13,26 @@ policy_out: DROP
 IN ACCEPT -source 192.168.1.12 -p tcp -dport 18789
 # Hooks depuis n8n (briefing, bilan)
 IN ACCEPT -source 192.168.1.14 -p tcp -dport 18789
-# Administration depuis le PC (SSH + interface OpenClaw)
+# Metriques de l'anonymiseur pour Prometheus
+IN ACCEPT -source 192.168.1.19 -p tcp -dport 8090
+# Administration depuis ton PC (SSH + interface OpenClaw)
 IN ACCEPT -source 192.168.1.29 -p tcp -dport 22
 IN ACCEPT -source 192.168.1.29 -p tcp -dport 18789
 
 # --- Sortant vers le LAN : seulement le necessaire ---
 OUT ACCEPT -dest 192.168.1.1 -p udp -dport 53
 OUT ACCEPT -dest 192.168.1.1 -p tcp -dport 53
-# Ollama sur le PC
-OUT ACCEPT -dest 192.168.1.29 -p tcp -dport 11434
 # n8n (MCP) et NPM (Nextcloud via son nom de domaine)
 OUT ACCEPT -dest 192.168.1.14 -p tcp -dport 5678
 OUT ACCEPT -dest 192.168.1.14 -p tcp -dport 443
 # Nextcloud en direct (si le nom resout vers .12)
 OUT ACCEPT -dest 192.168.1.12 -p tcp -dport 443
-# Tout le reste du reseau prive est interdit (Proxmox, iLO, Vaultwarden...)
+# Tout le reste du reseau prive est interdit (Proxmox, iLO, Vaultwarden, PC...)
 OUT DROP -dest 10.0.0.0/8
 OUT DROP -dest 172.16.0.0/12
 OUT DROP -dest 192.168.0.0/16
 
-# --- Sortant vers Internet (API Gemini/Mistral, mises a jour) ---
+# --- Sortant vers Internet (API des IA gratuites, mises a jour) ---
 OUT ACCEPT -p tcp -dport 443
 OUT ACCEPT -p tcp -dport 80
 OUT ACCEPT -p udp -dport 123

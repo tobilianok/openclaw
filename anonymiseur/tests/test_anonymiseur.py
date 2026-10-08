@@ -86,7 +86,11 @@ def faux_fournisseur(recus, statut_par_cle):
             return httpx.Response(statut, json={"error": "quota"})
         # L'IA "repond" en reutilisant le jeton vu dans le resultat d'outil.
         import re
-        jeton = re.search(r"\[PERSONNE_\d+\]", corps["messages"][-1]["content"]).group()
+        trouve = re.search(r"\[PERSONNE_\d+\]", json.dumps(corps["messages"][-1]))
+        jeton = trouve.group() if trouve else "[UTILISATEUR]"
+        if "tools" not in corps:  # avis du conseil ou synthese : texte seul
+            return httpx.Response(200, json={"choices": [{"index": 0, "finish_reason": "stop", "message": {
+                "role": "assistant", "content": f"Avis pour {jeton}."}}]})
         return httpx.Response(200, json={
             "id": "x", "object": "chat.completion", "created": 1, "model": corps["model"],
             "choices": [{"index": 0, "finish_reason": "tool_calls", "message": {
@@ -106,13 +110,20 @@ def proxy(tmp_path, nlp, monkeypatch):
     recus, statuts = [], {}
     config = {
         "fournisseurs": {
-            "gemini": {"url": "https://g.test/v1", "cle_env": "GEMINI_API_KEY", "modele": "gm"},
-            "mistral": {"url": "https://m.test/v1", "cle_env": "MISTRAL_API_KEY", "modele": "mm"},
-            "groq": {"url": "https://q.test/v1", "cle_env": "GROQ_API_KEY", "modele": "qm"},
+            "gemini": {"url": "https://g.test/v1", "cle_env": "GEMINI_API_KEY"},
+            "mistral": {"url": "https://m.test/v1", "cle_env": "MISTRAL_API_KEY"},
+            "groq": {"url": "https://q.test/v1", "cle_env": "GROQ_API_KEY"},
         },
-        "ordre_auto": ["gemini", "mistral", "groq"],
+        "routes": {
+            "gemini-flash": {"fournisseur": "gemini", "modele": "gm"},
+            "mistral-small": {"fournisseur": "mistral", "modele": "mm"},
+            "groq-petit": {"fournisseur": "groq", "modele": "qm", "contexte": 50},
+        },
+        "profils": {"auto": ["gemini-flash", "mistral-small", "groq-petit"],
+                    "reflexion": ["mistral-small", "gemini-flash"]},
         "ner": {"PERSONNE": True},
         "coffre": str(tmp_path / "c.db"),
+        "etat_quotas": str(tmp_path / "quotas.json"),
         "journal_envois": str(tmp_path / "envois.jsonl"),
     }
     monkeypatch.setenv("ANONYMISEUR_DICTIONNAIRE", "")
@@ -155,7 +166,7 @@ def test_proxy_bascule_et_pause(proxy):
     statuts["cle-gemini"] = 429
     h = {"Authorization": "Bearer secret"}
     r = client.post("/v1/chat/completions", json=DEMANDE, headers=h)
-    assert r.status_code == 200 and "(mistral)" in r.json()["model"]
+    assert r.status_code == 200 and "(mistral-small)" in r.json()["model"]
     assert [c for c, _ in recus] == ["cle-gemini", "cle-mistral"]
     recus.clear()
     client.post("/v1/chat/completions", json=DEMANDE, headers=h)
@@ -195,3 +206,61 @@ def test_agenda_ical_garde_les_dates(anon):
     sortie = anon.anonymiser(ics)
     assert "DTSTART:20261009T100000" in sortie and "Lefevre" not in sortie
     assert anon.retablir(sortie) == ics
+
+
+def test_proxy_conseil_via_mot_cle(proxy):
+    client, recus, _, _ = proxy
+    demande = {"model": "auto", "messages": [
+        {"role": "user", "content": "!conseil Paul Martin me propose un job, j'accepte ?"}]}
+    r = client.post("/v1/chat/completions", json=demande, headers={"Authorization": "Bearer secret"})
+    assert r.status_code == 200, r.text
+    assert "conseil[" in r.json()["model"]
+    # Aucun des appels (avis + synthese) ne contient le vrai nom
+    assert all("Paul" not in json.dumps(c, ensure_ascii=False) for _, c in recus)
+    assert len({cle for cle, _ in recus}) >= 2
+
+
+def test_metriques_sans_donnees_personnelles(proxy):
+    client, _, _, _ = proxy
+    client.post("/v1/chat/completions", json=DEMANDE, headers={"Authorization": "Bearer secret"})
+    m = client.get("/metrics").text
+    assert 'anonymiseur_requetes_total{route="gemini-flash",fournisseur="gemini",statut="ok"} 1' in m
+    assert "Paul" not in m and "Louis" not in m
+
+
+def test_pas_de_faux_noms_dans_un_prompt_anglais(anon):
+    prompt = ("Show the result to the user only when asked. Read the file first.\n"
+              "Subagents: avoid subagents for simple one-step work. Proactively check memory.\n"
+              "Mark it blocked only when the same blocker has recurred for at least three turns.\n"
+              "- Préfère des réponses courtes. Sa compagne s'appelle Emma.")
+    sortie = anon.anonymiser(prompt)
+    assert sortie.count("[PERSONNE_") == 1 and "Emma" not in sortie, sortie
+    assert "Show the result" in sortie and "Subagents" in sortie
+
+
+def test_forme_des_noms(anon):
+    for nom in ["Jean-Pierre Dupont", "Mme Nguyen", "Charles de Gaulle", "Léo"]:
+        assert nom not in anon.anonymiser(f"Demain je vois {nom} au marché."), nom
+
+
+def test_prompt_systeme_strict_conversation_large(anon):
+    ligne = "Several: most specific. None: read none."
+    assert anon.anonymiser(ligne, strict=True) == ligne
+    for phrase in ["Salut Sophie !", "Dis à Sophie que je suis en retard.", "Salut Sophie, tu viens ?"]:
+        assert "Sophie" not in anon.anonymiser(phrase, utilisateur=True), phrase
+    assert "Emma" not in anon.anonymiser("Sa compagne s'appelle Emma.", strict=True)
+
+
+def test_resultats_d_outils_gardent_les_noms_techniques(anon):
+    alerte = '{"labels": {"alertname": "ZfsPoolDegraded", "instance": "Jellyfin"}, "state": "firing"}'
+    assert anon.anonymiser(alerte) == alerte
+
+
+def test_texte_encode_en_json(anon):
+    sortie = anon.anonymiser('{"message": "Dis \\u00e0 In\\u00e8s que c\'est OK \\ud83d\\ude00"}', utilisateur=True)
+    assert "Inès" not in sortie and "In\\u00e8s" not in sortie and "à" in sortie and "😀" in sortie
+
+
+def test_etiquettes_techniques(anon):
+    ligne = "Runtime: agent=majordome | os=Linux 6.18 | host=vm"
+    assert anon.anonymiser(ligne, utilisateur=True) == ligne

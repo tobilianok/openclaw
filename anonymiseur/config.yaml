@@ -1,31 +1,71 @@
-# Configuration de l'anonymiseur. Les cles API sont lues dans l'environnement
-# (fichier .env), jamais ici.
+# Configuration de l'anonymiseur et du routeur d'IA gratuites.
+# Les cles API sont lues dans l'environnement (.env), jamais ici.
+#
+# Les limites ci-dessous sont celles des offres gratuites constatees en
+# octobre 2026, un peu en dessous pour garder de la marge. Elles changent
+# souvent : le routeur reagit de toute facon aux vrais refus (HTTP 429).
 
-# Fournisseurs gratuits, compatibles OpenAI. Un fournisseur sans cle est
-# ignore : il suffit de ne pas remplir sa variable pour le desactiver.
+# --- Comptes -----------------------------------------------------------------
+# Un fournisseur dont la variable de cle est vide est ignore (ses routes aussi).
 fournisseurs:
   gemini:
     url: https://generativelanguage.googleapis.com/v1beta/openai
     cle_env: GEMINI_API_KEY
-    modele: gemini-3-flash-preview
   mistral:
     url: https://api.mistral.ai/v1
     cle_env: MISTRAL_API_KEY
-    modele: mistral-small-latest
+  nvidia:
+    url: https://integrate.api.nvidia.com/v1
+    cle_env: NVIDIA_API_KEY
   groq:
     url: https://api.groq.com/openai/v1
     cle_env: GROQ_API_KEY
-    modele: openai/gpt-oss-120b
+  github:
+    url: https://models.github.ai/inference
+    cle_env: GITHUB_MODELS_TOKEN
   openrouter:
     url: https://openrouter.ai/api/v1
     cle_env: OPENROUTER_API_KEY
-    modele: openai/gpt-oss-120b:free
 
-# Modele "auto" : essaie dans cet ordre, saute un fournisseur pendant
-# `pause_apres_refus_s` secondes apres un refus (quota gratuit atteint...).
-ordre_auto: [gemini, mistral, groq, openrouter]
+# --- Routes : un modele chez un fournisseur, avec ses limites gratuites -------
+# contexte = taille max de la requete (tokens). Une requete du majordome fait
+# 10 000 a 25 000 tokens (personnalite, memoire, outils) : les routes a petit
+# contexte ne servent qu'au profil "rapide".
+routes:
+  gemini-flash:   {fournisseur: gemini, modele: gemini-3-flash-preview, contexte: 1000000, rpm: 8, tpm: 200000, rpd: 200}
+  gemini-pro:     {fournisseur: gemini, modele: gemini-2.5-pro, contexte: 1000000, rpm: 2, tpm: 100000, rpd: 40}
+  gemini-lite:    {fournisseur: gemini, modele: gemini-2.5-flash-lite, contexte: 1000000, rpm: 12, tpm: 200000, rpd: 800}
+  mistral-small:  {fournisseur: mistral, modele: mistral-small-latest, contexte: 128000, rpm: 50, tpm: 400000}
+  mistral-medium: {fournisseur: mistral, modele: mistral-medium-latest, contexte: 128000, rpm: 50, tpm: 400000}
+  mistral-large:  {fournisseur: mistral, modele: mistral-large-latest, contexte: 128000, rpm: 50, tpm: 400000}
+  nvidia-gptoss:  {fournisseur: nvidia, modele: openai/gpt-oss-120b, contexte: 120000, rpm: 35, rpd: 9000}
+  nvidia-nemotron: {fournisseur: nvidia, modele: nvidia/nemotron-3-super-120b-a12b, contexte: 120000, rpm: 35, rpd: 9000}
+  groq-gptoss:    {fournisseur: groq, modele: openai/gpt-oss-20b, contexte: 7000, rpm: 25, tpm: 7500, rpd: 900}
+  github-mini:    {fournisseur: github, modele: openai/gpt-4.1-mini, contexte: 7500, rpm: 12, rpd: 140}
+  openrouter-gptoss: {fournisseur: openrouter, modele: "openai/gpt-oss-120b:free", contexte: 120000, rpm: 15, rpd: 45}
+
+# --- Profils : ce que OpenClaw demande, et dans quel ordre essayer -----------
+profils:
+  # Conversation et outils (le majordome au quotidien)
+  auto: [gemini-flash, mistral-medium, nvidia-gptoss, mistral-small, openrouter-gptoss]
+  # Briefing, bilan, analyses : les meilleurs modeles d'abord
+  reflexion: [gemini-pro, mistral-large, nvidia-nemotron, gemini-flash, mistral-medium]
+  # Petites taches sans outils : les plus rapides d'abord
+  rapide: [groq-gptoss, github-mini, gemini-lite, mistral-small]
+
+# Pause d'une route apres un refus sans indication de duree (secondes)
 pause_apres_refus_s: 60
 
+# --- Mode conseil ------------------------------------------------------------
+# Ecris "!conseil" dans ton message (ou choisis le modele "conseil") : trois
+# IA de fournisseurs differents repondent, une quatrieme fait la synthese.
+# Environ 4 fois plus de quota et 2 fois plus lent : pour les vraies questions.
+conseil:
+  declencheur: "!conseil\\b"
+  membres: [reflexion, auto]     # profils des 2 avis supplementaires
+  synthese: reflexion
+
+# --- Anonymisation -----------------------------------------------------------
 # Detection automatique (spaCy, francais). Les personnes sont toujours
 # recherchees ; lieux et organisations donnent beaucoup de faux positifs
 # ("Proxmox", "Orange"...) : a activer seulement si besoin.
@@ -35,8 +75,9 @@ ner:
   LIEU: false
   ORGANISATION: false
 
-# Coffre des pseudonymes (ne quitte jamais la VM, a sauvegarder)
+# Coffre des pseudonymes et compteurs de quotas (ne quittent jamais la VM)
 coffre: /data/coffre.db
+etat_quotas: /data/quotas.json
 # Ton dictionnaire personnel (voir dictionnaire.example.yaml)
 dictionnaire: /config/dictionnaire.yaml
 

@@ -31,7 +31,7 @@
         "genericAuthType": "httpBearerAuth",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "{\n  \"message\": \"C'est l'heure du briefing du matin de Louis. Utilise tes outils : agenda (aujourd'hui et demain), meteo (1 jour), infra_alertes. Ecris un message court en francais : la journee (rendez-vous avec heures), la meteo en une ligne (et s'il faut un parapluie), puis l'infra seulement si une alerte est active. Ajoute au plus une remarque utile tiree de ce que tu sais de Louis. Pas de titre, pas de formule de politesse.\",\n  \"name\": \"Briefing du matin\",\n  \"agentId\": \"majordome\",\n  \"channel\": \"nextcloud-talk\",\n  \"to\": \"room:@@TALK_ROOM_MAJORDOME@@\"\n}",
+        "jsonBody": "{\n  \"message\": \"C'est l'heure du briefing du matin de Louis. Utilise tes outils : agenda (aujourd'hui et demain), meteo (1 jour), infra_alertes. Ecris un message court en francais : la journee (rendez-vous avec heures), la meteo en une ligne (et s'il faut un parapluie), puis l'infra seulement si une alerte est active. Ajoute au plus une remarque utile tiree de ce que tu sais de Louis. Pas de titre, pas de formule de politesse.\",\n  \"name\": \"Briefing du matin\",\n  \"agentId\": \"majordome\",\n  \"model\": \"anonymiseur/reflexion\",\n  \"channel\": \"nextcloud-talk\",\n  \"to\": \"room:@@TALK_ROOM_MAJORDOME@@\"\n}",
         "options": {
           "timeout": 30000
         }
@@ -82,7 +82,7 @@
         "genericAuthType": "httpBearerAuth",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "{\n  \"message\": \"C'est l'heure du bilan du soir. Relis ta note du jour dans memory/, mets a jour USER.md et MEMORY.md avec ce que tu as appris aujourd'hui (rien de sensible). Puis envoie a Louis un message tres court : ce qui l'attend demain (agenda) et, seulement s'il y en a, une alerte infra ou un point en suspens. S'il n'y a rien a signaler, dis-le en une ligne.\",\n  \"name\": \"Bilan du soir\",\n  \"agentId\": \"majordome\",\n  \"channel\": \"nextcloud-talk\",\n  \"to\": \"room:@@TALK_ROOM_MAJORDOME@@\"\n}",
+        "jsonBody": "{\n  \"message\": \"C'est l'heure du bilan du soir. Relis ta note du jour dans memory/, mets a jour USER.md et MEMORY.md avec ce que tu as appris aujourd'hui (jamais de mots de passe). Puis envoie a Louis un message tres court : ce qui l'attend demain (agenda) et, seulement s'il y en a, une alerte infra ou un point en suspens. S'il n'y a rien a signaler, dis-le en une ligne.\",\n  \"name\": \"Bilan du soir\",\n  \"agentId\": \"majordome\",\n  \"model\": \"anonymiseur/reflexion\",\n  \"channel\": \"nextcloud-talk\",\n  \"to\": \"room:@@TALK_ROOM_MAJORDOME@@\"\n}",
         "options": {
           "timeout": 30000
         }

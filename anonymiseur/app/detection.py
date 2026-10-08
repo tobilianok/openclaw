@@ -18,6 +18,39 @@ from functools import lru_cache
 
 from .coffre import Coffre, normaliser
 
+# Un nom de personne : 1 a 4 mots commencant par une majuscule (particules
+# "de", "du", "van"... admises), lettres, tirets et apostrophes uniquement.
+_MOT_NOM = r"[A-ZÀ-ÖØ-Þ][a-zà-öø-ÿ'’]*(?:-[A-ZÀ-ÖØ-Þa-zà-öø-ÿ][a-zà-öø-ÿ'’]*)*"
+FORME_NOM = re.compile(
+    rf"^(?:(?:M\.|Mme|Mlle|Dr|Me|Pr)\.? )?{_MOT_NOM}(?: (?:(?:de|du|des|d'|da|van|von|le|la) ?)?{_MOT_NOM}){{0,3}}$")
+
+def _tronquer_nom(mot: str) -> str:
+    """'Paul Martin jeudi' -> 'Paul Martin' ; '' si ce n'est pas un nom."""
+    mots = mot.split(" ")
+    for n in range(min(len(mots), 5), 0, -1):
+        candidat = " ".join(mots[:n])
+        if FORME_NOM.match(candidat):
+            return candidat
+    return ""
+
+
+MOTS_EN = frozenset("the and to of is you with for when this that use if not or be it are your only "
+                    "do does should must can will from by on as an at any never always each".split())
+MOTS_FR = frozenset("le la les de des et est un une pour que qui dans pas tu je il elle avec sur du au aux "
+                    "ce cette son sa ses mon ma mes ton ta tes nous vous ne se en a".split())
+
+
+def _ligne_francaise(texte: str, position: int, strict: bool = False) -> bool:
+    debut = texte.rfind("\n", 0, position) + 1
+    fin = texte.find("\n", position)
+    ligne = texte[debut:fin if fin != -1 else len(texte)].lower()
+    mots = re.findall(r"[a-zà-ÿ']+", ligne)
+    en = sum(m in MOTS_EN for m in mots)
+    fr = sum(m in MOTS_FR for m in mots)
+    # strict (prompt systeme, surtout en anglais) : il faut des indices de
+    # francais ; sinon (tes messages) : dans le doute, on anonymise.
+    return fr > en if strict else fr >= en
+
 # Jetons deja poses : "[PERSONNE_3]", "[UTILISATEUR]"...
 MOTIF_JETON = re.compile(r"\[[A-Z][A-Z0-9_]*\]")
 
@@ -35,6 +68,26 @@ REGLES: list[tuple[str, re.Pattern]] = [
         re.IGNORECASE)),
     ("IP", re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}\b")),
 ]
+
+
+_ECHAPPEMENT = re.compile(r"\\u([dD][89abAB][0-9a-fA-F]{2})\\u([dD][c-fC-F][0-9a-fA-F]{2})|\\u([0-9a-fA-F]{4})")
+
+
+def decoder_unicode(texte: str) -> str:
+    """Remplace les sequences \\uXXXX (y compris paires de substitution)."""
+    if "\\u" not in texte:
+        return texte
+
+    def remplacer(m: re.Match) -> str:
+        if m.group(3):
+            code = int(m.group(3), 16)
+            if 0xD800 <= code <= 0xDFFF or code < 0x20:
+                return m.group(0)  # moitie de paire isolee, ou caractere de controle
+            return chr(code)
+        haut, bas = int(m.group(1), 16), int(m.group(2), 16)
+        return chr(0x10000 + ((haut - 0xD800) << 10) + (bas - 0xDC00))
+
+    return _ECHAPPEMENT.sub(remplacer, texte)
 
 
 def _luhn(chiffres: str) -> bool:
@@ -100,7 +153,7 @@ class Anonymiseur:
             self._formes[normaliser(f)] = jeton
 
     # --- Detection ---------------------------------------------------------
-    def _zones(self, texte: str) -> list[Zone]:
+    def _zones(self, texte: str, strict: bool = False, utilisateur: bool = False) -> list[Zone]:
         zones: list[Zone] = []
         if self._motif_dico:
             for m in self._motif_dico.finditer(texte):
@@ -120,9 +173,25 @@ class Anonymiseur:
                 fin = debut + len(mot)
                 if not mot or any(c.isdigit() for c in mot):
                     continue
+                # "Runtime: ...", "os=Linux" : une etiquette, pas une personne
+                if texte[fin:fin + 1] in (":", "="):
+                    continue
+                if cat in ("PERSONNE", "NOM_PROPRE"):
+                    mot = _tronquer_nom(mot)
+                    if not mot:
+                        continue
+                    fin = debut + len(mot)
+                # Le modele francais voit des "noms" dans l'anglais (prompt
+                # systeme d'OpenClaw) : on ne le croit que sur du francais.
+                if not _ligne_francaise(texte, debut, strict):
+                    continue
                 # Sigles courts ("RDV", "EDF", "SMS") : faux positifs frequents
                 if mot.isupper() and len(mot) <= 5:
                     continue
+                if cat == "NOM_PROPRE":
+                    if not utilisateur or "PERSONNE" not in self.ner_categories:
+                        continue
+                    cat = "PERSONNE"
                 if cat in self.ner_categories:
                     zones.append(Zone(debut, fin, cat, 50))
         # Ne jamais retoucher un jeton deja pose.
@@ -139,11 +208,18 @@ class Anonymiseur:
         return sorted(retenues, key=lambda z: z.debut)
 
     # --- Remplacement ------------------------------------------------------
-    def anonymiser(self, texte: str) -> str:
+    def anonymiser(self, texte: str, strict: bool = False, utilisateur: bool = False) -> str:
+        """strict=True pour le prompt systeme : detection des noms plus
+        prudente. utilisateur=True pour les messages de Louis : on masque
+        aussi les noms propres en milieu de phrase. Le dictionnaire et les
+        regles s'appliquent toujours."""
         if not texte or not texte.strip():
             return texte
+        # Du texte encode en JSON ("In\\u00e8s") echapperait a la detection,
+        # alors que l'IA le lit sans peine : on decode avant d'analyser.
+        texte = decoder_unicode(texte)
         morceaux, curseur = [], 0
-        for z in self._zones(texte):
+        for z in self._zones(texte, strict, utilisateur):
             valeur = texte[z.debut:z.fin]
             if z.jeton is None:
                 propre = valeur.strip(" .,;:!?'’\"()")
@@ -206,10 +282,29 @@ NER_ETIQUETTES = {"PER": "PERSONNE", "LOC": "LIEU", "ORG": "ORGANISATION"}
 @lru_cache(maxsize=4096)
 def _entites_cache(nlp_id: int, texte: str) -> tuple:
     nlp = _NLP_REGISTRE[nlp_id]
-    return tuple(
-        (e.start_char, e.end_char, NER_ETIQUETTES[e.label_])
-        for e in nlp(texte).ents if e.label_ in NER_ETIQUETTES
-    )
+    doc = nlp(texte)
+    entites = [(e.start_char, e.end_char, NER_ETIQUETTES[e.label_])
+               for e in doc.ents if e.label_ in NER_ETIQUETTES]
+    # Noms propres que le modele n'a pas classes ("Salut Sophie", "Dis a
+    # Sophie") : suites de PROPN en milieu de phrase.
+    i = 0
+    while i < len(doc):
+        t = doc[i]
+        if t.pos_ == "PROPN" and t.text[:1].isupper():
+            j = i
+            while j + 1 < len(doc) and doc[j + 1].pos_ == "PROPN" and doc[j + 1].text[:1].isupper():
+                j += 1
+            avant = texte[:t.idx].rstrip()
+            debut_phrase = not avant or avant[-1] in ".!?:;{[(\"'\n" or avant.endswith("\\n")
+            # En debut de phrase, le 1er mot est souvent un mot courant avec
+            # majuscule ("Salut Sophie", "Merci Paul") : on le saute.
+            k = i + 1 if debut_phrase else i
+            if k <= j:
+                entites.append((doc[k].idx, doc[j].idx + len(doc[j].text), "NOM_PROPRE"))
+            i = j + 1
+        else:
+            i += 1
+    return tuple(entites)
 
 
 _NLP_REGISTRE: dict[int, object] = {}
