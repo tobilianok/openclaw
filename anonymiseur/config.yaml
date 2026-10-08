@@ -32,12 +32,16 @@ fournisseurs:
 # 10 000 a 25 000 tokens (personnalite, memoire, outils) : les routes a petit
 # contexte ne servent qu'au profil "rapide".
 routes:
-  gemini-flash:   {fournisseur: gemini, modele: gemini-3-flash-preview, contexte: 1000000, rpm: 8, tpm: 200000, rpd: 200}
-  gemini-pro:     {fournisseur: gemini, modele: gemini-2.5-pro, contexte: 1000000, rpm: 2, tpm: 100000, rpd: 40}
-  gemini-lite:    {fournisseur: gemini, modele: gemini-2.5-flash-lite, contexte: 1000000, rpm: 12, tpm: 200000, rpd: 800}
+  # Testes le 08/10/2026 avec un appel d'outil.
+  gemini-flash:   {fournisseur: gemini, modele: gemini-3.5-flash, contexte: 1000000, rpm: 8, tpm: 200000, rpd: 200}
+  gemini-flash-3: {fournisseur: gemini, modele: gemini-3-flash-preview, contexte: 1000000, rpm: 8, tpm: 200000, rpd: 200}
+  gemini-recent:  {fournisseur: gemini, modele: gemini-3.8-flash, contexte: 1000000, rpm: 8, tpm: 200000, rpd: 200}
+  gemini-lite:    {fournisseur: gemini, modele: gemini-3.5-flash-lite, contexte: 1000000, rpm: 12, tpm: 200000, rpd: 800}
+  # Gemini Pro (3.1 / pro-latest) n'est pas inclus dans l'offre gratuite (quota 0).
   mistral-small:  {fournisseur: mistral, modele: mistral-small-latest, contexte: 128000, rpm: 50, tpm: 400000}
   mistral-medium: {fournisseur: mistral, modele: mistral-medium-latest, contexte: 128000, rpm: 50, tpm: 400000}
-  mistral-large:  {fournisseur: mistral, modele: mistral-large-latest, contexte: 128000, rpm: 50, tpm: 400000}
+  mistral-magistral: {fournisseur: mistral, modele: magistral-medium-latest, contexte: 40000, rpm: 50, tpm: 400000}
+  # mistral-large-latest n'est pas inclus dans le plan gratuit Experiment.
   nvidia-gptoss:  {fournisseur: nvidia, modele: openai/gpt-oss-120b, contexte: 120000, rpm: 35, rpd: 9000}
   nvidia-nemotron: {fournisseur: nvidia, modele: nvidia/nemotron-3-super-120b-a12b, contexte: 120000, rpm: 35, rpd: 9000}
   groq-gptoss:    {fournisseur: groq, modele: openai/gpt-oss-20b, contexte: 7000, rpm: 25, tpm: 7500, rpd: 900}
@@ -47,9 +51,9 @@ routes:
 # --- Profils : ce que OpenClaw demande, et dans quel ordre essayer -----------
 profils:
   # Conversation et outils (le majordome au quotidien)
-  auto: [gemini-flash, mistral-medium, nvidia-gptoss, mistral-small, openrouter-gptoss]
+  auto: [gemini-flash, gemini-flash-3, mistral-medium, nvidia-gptoss, mistral-small, openrouter-gptoss]
   # Briefing, bilan, analyses : les meilleurs modeles d'abord
-  reflexion: [gemini-pro, mistral-large, nvidia-nemotron, gemini-flash, mistral-medium]
+  reflexion: [gemini-recent, mistral-magistral, nvidia-nemotron, gemini-flash, mistral-medium, gemini-flash-3]
   # Petites taches sans outils : les plus rapides d'abord
   rapide: [groq-gptoss, github-mini, gemini-lite, mistral-small]
 
