@@ -1,0 +1,45 @@
+# Configuration de l'anonymiseur. Les cles API sont lues dans l'environnement
+# (fichier .env), jamais ici.
+
+# Fournisseurs gratuits, compatibles OpenAI. Un fournisseur sans cle est
+# ignore : il suffit de ne pas remplir sa variable pour le desactiver.
+fournisseurs:
+  gemini:
+    url: https://generativelanguage.googleapis.com/v1beta/openai
+    cle_env: GEMINI_API_KEY
+    modele: gemini-3-flash-preview
+  mistral:
+    url: https://api.mistral.ai/v1
+    cle_env: MISTRAL_API_KEY
+    modele: mistral-small-latest
+  groq:
+    url: https://api.groq.com/openai/v1
+    cle_env: GROQ_API_KEY
+    modele: openai/gpt-oss-120b
+  openrouter:
+    url: https://openrouter.ai/api/v1
+    cle_env: OPENROUTER_API_KEY
+    modele: openai/gpt-oss-120b:free
+
+# Modele "auto" : essaie dans cet ordre, saute un fournisseur pendant
+# `pause_apres_refus_s` secondes apres un refus (quota gratuit atteint...).
+ordre_auto: [gemini, mistral, groq, openrouter]
+pause_apres_refus_s: 60
+
+# Detection automatique (spaCy, francais). Les personnes sont toujours
+# recherchees ; lieux et organisations donnent beaucoup de faux positifs
+# ("Proxmox", "Orange"...) : a activer seulement si besoin.
+modele_spacy: fr_core_news_lg
+ner:
+  PERSONNE: true
+  LIEU: false
+  ORGANISATION: false
+
+# Coffre des pseudonymes (ne quitte jamais la VM, a sauvegarder)
+coffre: /data/coffre.db
+# Ton dictionnaire personnel (voir dictionnaire.example.yaml)
+dictionnaire: /config/dictionnaire.yaml
+
+# Journal de ce qui part reellement vers le cloud, pour verifier
+# l'anonymisation. A desactiver (null) une fois rassure.
+journal_envois: /data/envois.jsonl

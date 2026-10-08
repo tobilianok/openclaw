@@ -1,0 +1,39 @@
+# Dictionnaire personnel de l'anonymiseur : tout ce qui est liste ici est
+# TOUJOURS remplace avant de partir vers le cloud, quelle que soit la
+# detection automatique. C'est la protection la plus fiable : prends 10 min
+# pour le remplir.
+# Copier en /opt/stacks/anonymiseur/dictionnaire.yaml (chmod 600).
+
+# Personnes. Toutes les formes d'une personne donnent le meme pseudonyme ;
+# "affichage" est la forme reecrite dans les reponses.
+personnes:
+  - jeton: UTILISATEUR          # toi : l'IA ne voit que [UTILISATEUR]
+    affichage: Louis
+    formes: [Louis Rousseaux, Louis, Rousseaux, tobilianok]
+  # - affichage: Marie
+  #   formes: [Marie Rousseaux, Marie]
+
+# Autres termes identifiants : adresse, employeur, domaines, plaques...
+termes:
+  - categorie: DOMAINE
+    formes: [louisrousseaux.fr, famillerousseaux.fr]
+  # - categorie: ADRESSE
+  #   affichage: la maison
+  #   formes: [12 rue des Lilas, 12 rue des Lilas 44000 Nantes]
+  # - categorie: EMPLOYEUR
+  #   formes: [Nom de ton entreprise]
+  # - categorie: VILLE
+  #   formes: [Ta ville]
+
+# Mots a ne jamais anonymiser (faux positifs de la detection automatique)
+jamais:
+  - Proxmox
+  - Jellyfin
+  - Immich
+  - Nextcloud
+  - Paperless
+  - Home Assistant
+  - Grafana
+  - Prometheus
+  - Talk
+  - Majordome
