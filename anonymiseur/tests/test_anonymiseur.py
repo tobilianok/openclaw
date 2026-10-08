@@ -264,3 +264,10 @@ def test_texte_encode_en_json(anon):
 def test_etiquettes_techniques(anon):
     ligne = "Runtime: agent=majordome | os=Linux 6.18 | host=vm"
     assert anon.anonymiser(ligne, utilisateur=True) == ligne
+
+
+def test_domaine_avec_sous_domaine(anon):
+    texte = "Portail : auth.louisrousseaux.fr et https://cloud.louisrousseaux.fr/x"
+    sortie = anon.anonymiser(texte)
+    assert "louisrousseaux" not in sortie, sortie
+    assert anon.retablir(sortie) == texte

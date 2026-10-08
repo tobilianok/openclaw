@@ -137,9 +137,12 @@ class Anonymiseur:
             self._groupe("PERSONNE", p)
         for t in dictionnaire.get("termes", []):
             self._groupe(t.get("categorie", "TERME").upper(), t)
+        # Pas de lettre ni "@" juste avant : "auth.louisrousseaux.fr" est bien
+        # masque (sous-domaine), et une adresse e-mail entiere reste prise par
+        # la regle EMAIL, plus longue.
         formes = sorted(self._formes, key=len, reverse=True)
         self._motif_dico = (
-            re.compile(r"(?<![\w@.])(?:" + "|".join(re.escape(f) for f in formes) + r")(?![\w@]|\.\w)", re.IGNORECASE)
+            re.compile(r"(?<![\w@])(?:" + "|".join(re.escape(f) for f in formes) + r")(?![\w@]|\.\w)", re.IGNORECASE)
             if formes else None
         )
 
