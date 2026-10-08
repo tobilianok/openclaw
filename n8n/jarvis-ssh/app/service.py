@@ -36,6 +36,8 @@ from fastapi.responses import HTMLResponse, JSONResponse
 log = logging.getLogger("jarvis-ssh")
 
 CARACTERES_LECTURE = re.compile(r"^[A-Za-z0-9 ._/@:=,+-]{1,300}$")
+# Jeton de l'anonymiseur reste tel quel, ex. [IDENTIFIANT_1] ou [UTILISATEUR]
+PSEUDONYME = re.compile(r"\[(?:[A-Z]{3,}(?:_[A-Z]+)*_\d+|UTILISATEUR)\]")
 MAX_COMMANDES = 10
 MAX_SORTIE = 12000
 
@@ -238,6 +240,16 @@ def creer_app(config: dict | None = None, executeur: Executeur | None = None,
             raise HTTPException(400, f"champs obligatoires manquants : {', '.join(manque)}")
         if len(commandes) > MAX_COMMANDES or any(len(c) > 500 for c in commandes):
             raise HTTPException(400, f"au plus {MAX_COMMANDES} commandes de 500 caracteres")
+        for c in commandes:
+            if (p := PSEUDONYME.search(c)):
+                # L'anonymiseur n'a pas pu le retablir (jeton mal recopie par l'IA) :
+                # la commande viserait un chemin ou un nom qui n'existe pas.
+                log.warning("demande avec pseudonyme non retabli : %s", c)
+                return {"statut": "erreur_pseudonyme", "commande": c, "pseudonyme": p.group(0),
+                        "consigne": f"La commande contient {p.group(0)}, qui n'est pas un pseudonyme connu "
+                                    "(probablement mal recopie). Rien n'a ete soumis a Louis. Recopie le "
+                                    "pseudonyme EXACTEMENT tel qu'il apparait dans la conversation, crochets "
+                                    "compris, puis soumets de nouveau la demande."}
         for c in commandes:
             for concernees, motif, raison in protections:
                 if nom in concernees and motif.search(c):

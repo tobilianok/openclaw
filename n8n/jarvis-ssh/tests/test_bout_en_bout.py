@@ -218,3 +218,18 @@ def test_demande_expiree(env):
     assert "n'est plus en attente" in html.unescape(r.text)
     time.sleep(1)
     assert not Path(temoin).exists()
+
+
+def test_pseudonyme_non_retabli_jamais_propose(env):
+    client, faux = env
+    avant = len(faux.talk)
+    r = client.post("/demande", headers=H, json={
+        "machine": "srv-nas", "commandes": "cd /home/[UTILISATNANT_1]/immich-stack && docker compose pull",
+        "explication": "x", "risques": "x", "retour_arriere": "x"})
+    assert r.json()["statut"] == "erreur_pseudonyme" and r.json()["pseudonyme"] == "[UTILISATNANT_1]"
+    assert len(faux.talk) == avant
+    # Les tests bash ordinaires ne sont pas pris pour des pseudonymes
+    r = client.post("/demande", headers=H, json={
+        "machine": "srv-nas", "commandes": "[ -f /tmp/x ] && [[ -d /tmp ]] && grep '[A-Z]' /etc/hostname",
+        "explication": "x", "risques": "x", "retour_arriere": "x"})
+    assert r.json()["statut"] == "en_attente_de_validation"
