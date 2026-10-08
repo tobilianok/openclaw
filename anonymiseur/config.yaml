@@ -32,11 +32,14 @@ fournisseurs:
 # 10 000 a 25 000 tokens (personnalite, memoire, outils) : les routes a petit
 # contexte ne servent qu'au profil "rapide".
 routes:
-  # Testes le 08/10/2026 avec un appel d'outil.
-  gemini-flash:   {fournisseur: gemini, modele: gemini-3.5-flash, contexte: 1000000, rpm: 8, tpm: 200000, rpd: 200}
-  gemini-flash-3: {fournisseur: gemini, modele: gemini-3-flash-preview, contexte: 1000000, rpm: 8, tpm: 200000, rpd: 200}
-  gemini-recent:  {fournisseur: gemini, modele: gemini-3.8-flash, contexte: 1000000, rpm: 8, tpm: 200000, rpd: 200}
-  gemini-lite:    {fournisseur: gemini, modele: gemini-3.5-flash-lite, contexte: 1000000, rpm: 12, tpm: 200000, rpd: 800}
+  # Testes le 08/10/2026 avec un appel d'outil. Offre gratuite Gemini : environ
+  # 20 requetes/jour PAR MODELE (quota atteint le 08/10 apres ~25 requetes) ;
+  # chaque modele a son propre compteur, on en utilise donc plusieurs.
+  gemini-flash:   {fournisseur: gemini, modele: gemini-3.5-flash, contexte: 1000000, rpm: 5, tpm: 200000, rpd: 18}
+  gemini-flash-3: {fournisseur: gemini, modele: gemini-3-flash-preview, contexte: 1000000, rpm: 5, tpm: 200000, rpd: 18}
+  gemini-recent:  {fournisseur: gemini, modele: gemini-3.8-flash, contexte: 1000000, rpm: 5, tpm: 200000, rpd: 18}
+  gemini-lite:    {fournisseur: gemini, modele: gemini-3.5-flash-lite, contexte: 1000000, rpm: 10, tpm: 200000, rpd: 18}
+  gemini-lite-2:  {fournisseur: gemini, modele: gemini-flash-lite-latest, contexte: 1000000, rpm: 10, tpm: 200000, rpd: 18}
   # Gemini Pro (3.1 / pro-latest) n'est pas inclus dans l'offre gratuite (quota 0).
   mistral-small:  {fournisseur: mistral, modele: mistral-small-latest, contexte: 128000, rpm: 50, tpm: 400000}
   mistral-medium: {fournisseur: mistral, modele: mistral-medium-latest, contexte: 128000, rpm: 50, tpm: 400000}
@@ -57,11 +60,11 @@ routes:
 # --- Profils : ce que OpenClaw demande, et dans quel ordre essayer -----------
 profils:
   # Conversation et outils (le majordome au quotidien)
-  auto: [gemini-flash, nvidia-glm, nvidia-nemotron, gemini-flash-3, mistral-medium, mistral-small, openrouter-gptoss]
+  auto: [nvidia-glm, gemini-flash, nvidia-nemotron, gemini-flash-3, gemini-recent, mistral-medium, mistral-small, openrouter-gptoss]
   # Briefing, bilan, analyses : les meilleurs modeles d'abord
-  reflexion: [nvidia-nemotron-ultra, gemini-recent, nvidia-glm, nvidia-kimi, gemini-flash, mistral-magistral, mistral-medium]
+  reflexion: [nvidia-nemotron-ultra, gemini-recent, nvidia-glm, gemini-flash, nvidia-kimi, mistral-magistral, mistral-medium]
   # Petites taches sans outils : les plus rapides d'abord
-  rapide: [groq-gptoss-120b, groq-gptoss, nvidia-gptoss20, github-mini, gemini-lite, mistral-small]
+  rapide: [groq-gptoss-120b, groq-gptoss, nvidia-gptoss20, gemini-lite, gemini-lite-2, github-mini, mistral-small]
 
 # Pause d'une route apres un refus sans indication de duree (secondes)
 pause_apres_refus_s: 60

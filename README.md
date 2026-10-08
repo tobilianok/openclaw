@@ -67,9 +67,9 @@ vraies valeurs dans les réponses. Rien ne tourne sur ton PC.
 
 | Profil | Pour quoi | Ordre d'essai |
 |---|---|---|
-| `auto` | Conversation et outils | Gemini Flash → Mistral Medium → NVIDIA gpt-oss-120b → Mistral Small → OpenRouter |
-| `reflexion` | Briefing, bilan | Gemini Pro → Mistral Large → NVIDIA Nemotron → Gemini Flash → Mistral Medium |
-| `rapide` | Petites tâches sans outils | Groq → GitHub Models → Gemini Flash-Lite → Mistral Small |
+| `auto` | Conversation et outils | NVIDIA GLM 5.3 → Gemini 3.5 Flash → Nemotron Super → Gemini 3 Flash → Gemini 3.8 Flash |
+| `reflexion` | Briefing, bilan | Nemotron Ultra 550B → Gemini 3.8 Flash → GLM 5.3 → Gemini 3.5 Flash → Kimi K3 |
+| `rapide` | Petites tâches sans outils | Groq gpt-oss-120b → Groq gpt-oss-20b → NVIDIA gpt-oss-20b → Gemini Flash-Lite |
 | `conseil` | Écris **`!conseil`** dans ton message | 3 IA de fournisseurs différents répondent, une 4ᵉ fait la synthèse |
 
 Comment le routeur choisit :
