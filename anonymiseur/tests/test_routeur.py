@@ -166,3 +166,32 @@ def test_conseil_meme_fournisseur_si_pas_d_autre(faux, monkeypatch):
     premiere, route1 = lancer(r.appeler("auto", CORPS))
     rep, nom = lancer(r.conseil(CORPS, premiere, route1, ["reflexion", "auto"], "reflexion"))
     assert nom.startswith("conseil[a1+a2]") and rep["choices"][0]["message"]["content"].startswith("SYNTHESE")
+
+
+def test_signatures_gemini_reinjectees_et_retirees_ailleurs(faux):
+    cfg = config()
+    cfg["fournisseurs"]["a"]["url"] = "https://a.test/v1"
+    r = Routeur(cfg, httpx.AsyncClient(transport=httpx.MockTransport(faux)))
+    r.routes["a1"].fournisseur = "gemini"
+    r.signatures["c1"] = {"google": {"thought_signature": "SIG"}}
+    corps = {"messages": [
+        {"role": "user", "content": "Q"},
+        {"role": "assistant", "content": None, "tool_calls": [
+            {"id": "c1", "type": "function", "function": {"name": "agenda", "arguments": "{}"}},
+            {"id": "c2", "type": "function", "function": {"name": "agenda", "arguments": "{}"}}]},
+        {"role": "tool", "tool_call_id": "c1", "content": "ok"}]}
+    vers_gemini = r._adapter(corps, r.routes["a1"])
+    tcs = vers_gemini["messages"][1]["tool_calls"]
+    assert tcs[0]["extra_content"]["google"]["thought_signature"] == "SIG"
+    assert tcs[1]["extra_content"]["google"]["thought_signature"] == "skip_thought_signature_validator"
+    assert "extra_content" not in corps["messages"][1]["tool_calls"][0]  # original intact
+    corps["messages"][1]["tool_calls"][0]["extra_content"] = {"google": {}}
+    vers_autre = r._adapter(corps, r.routes["b1"])
+    assert all("extra_content" not in tc for tc in vers_autre["messages"][1]["tool_calls"])
+
+
+def test_signatures_memorisees(faux):
+    r = routeur(faux)
+    r._memoriser_signatures({"choices": [{"message": {"tool_calls": [
+        {"id": "x9", "extra_content": {"google": {"thought_signature": "S"}}}]}}]})
+    assert r.signatures["x9"]["google"]["thought_signature"] == "S"

@@ -9,12 +9,13 @@ Vocabulaire :
 from __future__ import annotations
 
 import asyncio
+import copy
 import json
 import logging
 import os
 import re
 import time
-from collections import defaultdict, deque
+from collections import OrderedDict, defaultdict, deque
 from dataclasses import dataclass, field
 
 import httpx
@@ -113,7 +114,35 @@ class Routeur:
         self.profils = {p: [n for n in noms if n in self.routes]
                         for p, noms in (config.get("profils") or {}).items()}
         self.stats = defaultdict(lambda: {"ok": 0, "echec": 0, "latence": 0.0})
+        # Signatures de reflexion de Gemini, par identifiant d'appel d'outil
+        # (OpenClaw ne les renvoie pas, Gemini les exige au tour suivant).
+        self.signatures: OrderedDict[str, dict] = OrderedDict()
         self._charger_etat()
+
+    # --- Particularites des fournisseurs ----------------------------------
+    def _adapter(self, corps: dict, r: Route) -> dict:
+        """Corps de requete ajuste pour le fournisseur de la route."""
+        if not any(m.get("tool_calls") for m in corps.get("messages", [])):
+            return corps
+        corps = copy.deepcopy(corps)
+        for m in corps["messages"]:
+            for tc in m.get("tool_calls") or []:
+                if r.fournisseur == "gemini":
+                    if "extra_content" not in tc:
+                        tc["extra_content"] = self.signatures.get(tc.get("id")) or {
+                            "google": {"thought_signature": "skip_thought_signature_validator"}}
+                else:
+                    tc.pop("extra_content", None)
+        return corps
+
+    def _memoriser_signatures(self, donnees: dict) -> None:
+        for choix in donnees.get("choices") or []:
+            for tc in (choix.get("message") or {}).get("tool_calls") or []:
+                if tc.get("id") and tc.get("extra_content"):
+                    self.signatures[tc["id"]] = tc["extra_content"]
+                    self.signatures.move_to_end(tc["id"])
+        while len(self.signatures) > 5000:
+            self.signatures.popitem(last=False)
 
     # --- Persistance des compteurs du jour (survit a un redemarrage) -------
     def _charger_etat(self) -> None:
@@ -170,7 +199,7 @@ class Routeur:
             try:
                 rep = await self.client.post(
                     f"{r.url}/chat/completions",
-                    json={**corps, "model": r.modele, "stream": False},
+                    json={**self._adapter(corps, r), "model": r.modele, "stream": False},
                     headers={"Authorization": f"Bearer {r.cle}"} if r.cle else {},
                     timeout=r.delai_s,
                 )
@@ -193,6 +222,7 @@ class Routeur:
                     r.minute[-1] = (r.minute[-1][0], reels)
                 self.stats[r.nom]["ok"] += 1
                 self.stats[r.nom]["latence"] += duree
+                self._memoriser_signatures(donnees)
                 return donnees, r
             self._traiter_refus(r, rep)
             erreurs.append(f"{r.nom}: HTTP {rep.status_code} {rep.text[:160]}")
