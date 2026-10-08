@@ -27,6 +27,7 @@ termes:
 
 # Mots a ne jamais anonymiser (faux positifs de la detection automatique)
 jamais:
+  - Jarvis
   - Proxmox
   - Jellyfin
   - Immich

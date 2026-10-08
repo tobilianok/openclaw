@@ -330,6 +330,26 @@ Prometheus (.19).
       synthétisée par plusieurs IA.
 - [ ] Le lendemain à 7 h, le briefing arrive dans Talk.
 
+## SSH sur l'infra (Jarvis assiste, Louis décide)
+
+```
+Jarvis ──outil MCP──▶ n8n ──▶ jarvis-ssh (VM Docker) ──SSH──▶ machines (utilisateur "jarvis")
+  infra_ssh_lecture ............ clé LECTURE : commandes de diagnostic seulement,
+                                 bridées CÔTÉ SERVEUR par /usr/local/bin/jarvis-lecture
+  infra_ssh_demande_action ..... rien n'est exécuté : message dans Talk avec les
+                                 commandes exactes + lien ✅/❌ (NPM + Authentik)
+                                 → après TON clic : clé ACTION (sudo), résultat
+                                 posté dans Talk, Jarvis prévenu
+```
+
+- Jarvis n'a **aucune clé** et ne voit **jamais** le lien de validation.
+- **Garde-fous** (`n8n/jarvis-ssh/config.yaml`) : toute action qui couperait la VM
+  de Jarvis (106), la VM Docker (102), n8n, NPM ou l'hyperviseur est refusée d'office.
+- Les clés ne sont acceptées que depuis la VM Docker (`from=` dans `authorized_keys`).
+- Retirer l'accès d'une machine : `sudo bash installer-jarvis.sh --desinstaller`.
+- Tests : `infra/jarvis` (verrou de lecture) et `n8n/jarvis-ssh/tests` (bout en bout avec
+  un vrai sshd : `JARVIS_TEST_SSH=1 python -m pytest tests`).
+
 ## Faire évoluer le majordome
 
 - **Masquer un nouveau nom** : ajoute-le dans `dictionnaire.yaml`, puis

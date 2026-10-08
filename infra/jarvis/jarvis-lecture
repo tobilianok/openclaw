@@ -1,0 +1,111 @@
+#!/usr/bin/env bash
+# jarvis-lecture : commande forcee de la cle SSH "lecture" de Jarvis.
+#
+# Installe dans /usr/local/bin/jarvis-lecture et branche dans
+# ~jarvis/.ssh/authorized_keys via command="/usr/local/bin/jarvis-lecture".
+# Quelle que soit la commande demandee par le client SSH, c'est ce script
+# qui s'execute : il n'accepte qu'une liste fermee de commandes de
+# diagnostic, sans shell (pas de ; | & $ ` > < ...), avec des arguments
+# verifies un par un. Tout le reste est refuse.
+set -uo pipefail
+
+refuser() { echo "REFUSE : $*" >&2; exit 126; }
+
+demande="${SSH_ORIGINAL_COMMAND:-}"
+[ -n "$demande" ] || refuser "aucune commande"
+[ ${#demande} -le 300 ] || refuser "commande trop longue"
+# Uniquement lettres, chiffres, espaces et . _ - / @ : = , +
+if [[ ! "$demande" =~ ^[A-Za-z0-9\ ._/@:=,+-]+$ ]]; then
+  refuser "caracteres interdits (pas de shell : ; | & \$ \` < > ' \" * ? etc.)"
+fi
+read -r -a a <<< "$demande"
+
+nom='^[A-Za-z0-9@._:-]{1,80}$'      # unite systemd, conteneur, pool ZFS
+nombre='^[0-9]{1,3}$'               # lignes de journal (max 999)
+chemin='^/[A-Za-z0-9/._-]{0,120}$'  # pour df
+vmid='^[0-9]{1,6}$'
+disque='^/dev/(sd[a-z]{1,2}|nvme[0-9]{1,2}n[0-9]{1,2}|vd[a-z])$'
+
+ok() { executer "$@"; exit $?; }
+executer() {
+  # sudo -n : jamais de mot de passe ; timeout et taille de sortie bornes
+  timeout 25 sudo -n -- "$@" 2>&1 | head -c 40000
+  return "${PIPESTATUS[0]}"
+}
+
+n=${#a[@]}
+case "${a[0]}" in
+  uptime|hostname|lsblk|sensors|uname)
+    [ "$n" -eq 1 ] || { [ "${a[0]}" = uname ] && [ "$n" -eq 2 ] && [ "${a[1]}" = -a ]; } || refuser "arguments"
+    ok "${a[@]}" ;;
+  free)
+    [ "$n" -eq 2 ] && [ "${a[1]}" = -h ] || refuser "usage : free -h"
+    ok free -h ;;
+  df)
+    [ "$n" -ge 2 ] && [ "$n" -le 3 ] && [ "${a[1]}" = -h ] || refuser "usage : df -h [chemin]"
+    [ "$n" -eq 2 ] || [[ "${a[2]}" =~ $chemin ]] || refuser "chemin"
+    ok "${a[@]}" ;;
+  ip)
+    [ "$n" -eq 3 ] && [ "${a[1]}" = -br ] && [[ "${a[2]}" =~ ^(a|addr|link)$ ]] || refuser "usage : ip -br a"
+    ok "${a[@]}" ;;
+  cat)
+    [ "$n" -eq 2 ] && [[ "${a[1]}" =~ ^(/etc/os-release|/proc/loadavg|/proc/mdstat)$ ]] || refuser "cat limite a /etc/os-release, /proc/loadavg, /proc/mdstat"
+    ok "${a[@]}" ;;
+  systemctl)
+    if [ "$n" -eq 2 ] && [ "${a[1]}" = --failed ]; then ok systemctl --failed --no-pager; fi
+    [ "$n" -eq 3 ] && [[ "${a[1]}" =~ ^(status|is-active|is-enabled)$ ]] && [[ "${a[2]}" =~ $nom ]] || refuser "usage : systemctl --failed | status|is-active|is-enabled <unite>"
+    ok systemctl "${a[1]}" "${a[2]}" --no-pager ;;
+  journalctl)
+    # journalctl -u <unite> -n <N> | journalctl -p err -n <N> | journalctl -b -n <N>
+    [ "$n" -eq 5 ] || refuser "usage : journalctl -u <unite>|-p err|-b -n <N>"
+    case "${a[1]}" in
+      -u) [[ "${a[2]}" =~ $nom ]] || refuser "unite" ;;
+      -p) [[ "${a[2]}" =~ ^(emerg|alert|crit|err|warning)$ ]] || refuser "priorite" ;;
+      -b) [[ "${a[2]}" =~ ^(0|-1)$ ]] || refuser "demarrage (0 ou -1)" ;;
+      *) refuser "option" ;;
+    esac
+    [ "${a[3]}" = -n ] && [[ "${a[4]}" =~ $nombre ]] || refuser "-n <N>"
+    ok journalctl "${a[1]}" "${a[2]}" -n "${a[4]}" --no-pager ;;
+  docker)
+    case "${a[1]:-}" in
+      ps) [ "$n" -eq 2 ] || { [ "$n" -eq 3 ] && [ "${a[2]}" = -a ]; } || refuser "usage : docker ps [-a]"
+          ok docker ps "${a[@]:2}" --format 'table {{.Names}}\t{{.Status}}\t{{.Image}}' ;;
+      stats) [ "$n" -eq 2 ] || refuser "usage : docker stats"; ok docker stats --no-stream ;;
+      logs) [ "$n" -eq 5 ] && [ "${a[2]}" = --tail ] && [[ "${a[3]}" =~ $nombre ]] && [[ "${a[4]}" =~ $nom ]] || refuser "usage : docker logs --tail <N> <conteneur>"
+            ok docker logs --tail "${a[3]}" "${a[4]}" ;;
+      compose) [ "$n" -eq 3 ] && [ "${a[2]}" = ls ] || refuser "usage : docker compose ls"; ok docker compose ls ;;
+      *) refuser "docker : ps, stats, logs, compose ls" ;;
+    esac ;;
+  zpool)
+    [[ "${a[1]:-}" =~ ^(status|list)$ ]] && { [ "$n" -eq 2 ] || { [ "$n" -eq 3 ] && [[ "${a[2]}" =~ $nom ]]; }; } || refuser "usage : zpool status|list [pool]"
+    ok "${a[@]}" ;;
+  zfs)
+    [ "$n" -eq 2 ] && [ "${a[1]}" = list ] || refuser "usage : zfs list"
+    ok zfs list ;;
+  qm|pct)
+    if [ "$n" -eq 2 ] && [ "${a[1]}" = list ]; then ok "${a[@]}"; fi
+    [ "$n" -eq 3 ] && [[ "${a[1]}" =~ ^(status|config)$ ]] && [[ "${a[2]}" =~ $vmid ]] || refuser "usage : qm|pct list | status|config <id>"
+    ok "${a[@]}" ;;
+  pvesm)
+    [ "$n" -eq 2 ] && [ "${a[1]}" = status ] || refuser "usage : pvesm status"
+    ok pvesm status ;;
+  apt)
+    [ "$n" -eq 3 ] && [ "${a[1]}" = list ] && [ "${a[2]}" = --upgradable ] || refuser "usage : apt list --upgradable"
+    ok apt list --upgradable ;;
+  smartctl)
+    [ "$n" -eq 3 ] && [[ "${a[1]}" =~ ^(-H|-A)$ ]] && [[ "${a[2]}" =~ $disque ]] || refuser "usage : smartctl -H|-A /dev/sdX"
+    ok "${a[@]}" ;;
+  aide)
+    cat <<'EOF'
+Commandes de lecture autorisees :
+  uptime | hostname | uname -a | lsblk | sensors | free -h | df -h [chemin]
+  ip -br a | cat /etc/os-release | cat /proc/loadavg | cat /proc/mdstat
+  systemctl --failed | systemctl status|is-active|is-enabled <unite>
+  journalctl -u <unite> -n <N> | journalctl -p err -n <N> | journalctl -b 0 -n <N>
+  docker ps [-a] | docker stats | docker logs --tail <N> <conteneur> | docker compose ls
+  zpool status|list [pool] | zfs list | qm|pct list | qm|pct status|config <id> | pvesm status
+  apt list --upgradable | smartctl -H|-A /dev/sdX
+EOF
+    exit 0 ;;
+  *) refuser "commande non autorisee en lecture (tape 'aide' pour la liste)" ;;
+esac

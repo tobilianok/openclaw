@@ -25,6 +25,20 @@ services:
       postgres:
         condition: service_healthy
 
+  # Acces SSH de Jarvis a l'infra (lecture bridee + actions validees par Louis).
+  # n8n l'appelle sur http://jarvis-ssh:8001 ; NPM publie les pages de
+  # validation (port 8001 de la VM) derriere Authentik.
+  jarvis-ssh:
+    build: ./jarvis-ssh
+    image: majordome/jarvis-ssh:local
+    restart: unless-stopped
+    env_file: jarvis-ssh.env
+    ports:
+      - "8001:8001"
+    volumes:
+      - ./jarvis-ssh-data:/data
+      - ./jarvis-ssh/config.yaml:/app/config.yaml:ro
+
   postgres:
     image: postgres:16
     restart: unless-stopped

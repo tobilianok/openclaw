@@ -1,0 +1,43 @@
+# Machines que Jarvis peut consulter (cle LECTURE) et sur lesquelles il peut
+# DEMANDER une action (cle ACTION, apres validation de Louis).
+# La VM de Jarvis (192.168.1.16) et Home Assistant sont volontairement absents.
+machines:
+  ml150:      {hote: 192.168.1.10, description: "Hyperviseur Proxmox VE (toutes les VM)"}
+  srv-nas:    {hote: 192.168.1.11, description: "NAS : pool ZFS archive, Jellyfin, GPU"}
+  nextcloud:  {hote: 192.168.1.12, description: "Nextcloud (snap) + Talk"}
+  immich:     {hote: 192.168.1.13, description: "Immich (photos)"}
+  docker:     {hote: 192.168.1.14, description: "Docker : NPM, n8n, Vaultwarden, Paperless, Collabora, forge, musique"}
+  srv-web:    {hote: 192.168.1.15, description: "Site louisrousseaux.fr (PHP)"}
+  frigate:    {hote: 192.168.1.17, description: "Frigate (cameras)"}
+  monitoring: {hote: 192.168.1.19, description: "Prometheus, Alertmanager, Grafana, Homepage"}
+  authentik:  {hote: 192.168.1.20, description: "Authentik (SSO)"}
+
+# Garde-fous : une demande d'action qui correspond est REFUSEE d'office, sans
+# meme etre proposee a Louis. Jarvis lui explique alors comment la faire a la
+# main. (La validation de Louis reste le vrai controle ; ceci evite les
+# erreurs qui couperaient Jarvis ou n8n, et donc toute validation.)
+protections:
+  - machines: [ml150]
+    motif: '\b(qm|pct)\s+(stop|shutdown|reboot|reset|destroy|suspend|hibernate|migrate|set|unlink|resize)\b[^\n]*\b(106|102)\b'
+    raison: "toucherait la VM de Jarvis (106) ou la VM Docker qui heberge n8n (102)"
+  - machines: [ml150, docker]
+    motif: '(\b(reboot|shutdown|poweroff|halt|kexec)\b|\binit\s+[06]\b)'
+    raison: "redemarrer ou eteindre cette machine couperait Jarvis ou n8n"
+  - machines: [ml150, docker]
+    motif: '(\b(ifdown|ifreload)\b|systemctl\s+(stop|restart)\s+(networking|systemd-networkd|NetworkManager))'
+    raison: "couper le reseau de cette machine isolerait Jarvis ou n8n"
+  - machines: [ml150]
+    motif: '(pve-firewall\s+(stop|restart)|/etc/pve/firewall/(106|cluster)\.fw)'
+    raison: "modifierait le pare-feu qui protege la VM de Jarvis"
+  - machines: [docker]
+    motif: '\bsystemctl\s+(stop|restart|disable|mask|kill)\s+(docker|containerd)'
+    raison: "arreter Docker couperait n8n"
+  - machines: [docker]
+    motif: '\bdocker\b[^\n]*\b(stop|kill|rm|restart|pause|down|rename|update|prune)\b[^\n]*\b(n8n|postgres|jarvis-ssh|npm|nginx-proxy|proxy-manager)'
+    raison: "arreterait n8n, son service SSH ou NPM (le lien de validation passe par NPM)"
+  - machines: [docker]
+    motif: '(stacks/(n8n|npm|nginx)[^\n]*\b(down|stop|restart|kill|rm)\b|\b(down|stop|restart|kill|rm)\b[^\n]*stacks/(n8n|npm|nginx))'
+    raison: "arreterait la stack n8n ou NPM"
+
+# Une demande non traitee expire au bout de :
+expiration_minutes: 30

@@ -285,6 +285,64 @@
           "name": "Majordome - Seerr"
         }
       }
+    },
+    {
+      "parameters": {
+        "toolDescription": "Lit l'etat d'une machine de l'infra en SSH (diagnostic uniquement, aucune modification). Machines : ml150 (hyperviseur Proxmox), srv-nas (NAS ZFS, Jellyfin), nextcloud, immich, docker (NPM, n8n, Vaultwarden, Paperless...), srv-web, frigate, monitoring (Prometheus/Grafana), authentik. Commandes autorisees : uptime, hostname, uname -a, lsblk, sensors, free -h, df -h [chemin], ip -br a, cat /etc/os-release|/proc/loadavg|/proc/mdstat, systemctl --failed, systemctl status|is-active|is-enabled <unite>, journalctl -u <unite> -n <N> | journalctl -p err -n <N> | journalctl -b 0 -n <N>, docker ps [-a], docker stats, docker logs --tail <N> <conteneur>, docker compose ls, zpool status|list [pool], zfs list, qm|pct list, qm|pct status|config <id>, pvesm status, apt list --upgradable, smartctl -H|-A /dev/sdX, aide. Pas de ; | & $ ni guillemets.",
+        "method": "POST",
+        "url": "@@JARVIS_SSH_URL@@/lecture",
+        "options": {
+          "timeout": 20000
+        },
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ machine: $fromAI('machine', `Nom de la machine`, 'string'), commande: $fromAI('commande', `Commande de lecture autorisee`, 'string') }) }}"
+      },
+      "id": "outil-infra_ssh_lecture",
+      "name": "infra_ssh_lecture",
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.2,
+      "position": [
+        1200,
+        300
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "majCredJarvisSsh1",
+          "name": "Majordome - jarvis-ssh"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "toolDescription": "Demande a Louis l'autorisation d'executer des commandes qui MODIFIENT une machine (ml150 (hyperviseur Proxmox), srv-nas (NAS ZFS, Jellyfin), nextcloud, immich, docker (NPM, n8n, Vaultwarden, Paperless...), srv-web, frigate, monitoring (Prometheus/Grafana), authentik). Rien n'est execute tant que Louis n'a pas valide lui-meme dans Talk ; tu seras prevenu du resultat. Les commandes s'executent telles quelles, en root, une par ligne, arret a la premiere erreur. Explique clairement le pourquoi, les risques et le retour arriere. Interdit d'office : tout ce qui couperait la VM de Jarvis (106), la VM Docker (102), n8n, NPM ou l'hyperviseur.",
+        "method": "POST",
+        "url": "@@JARVIS_SSH_URL@@/demande",
+        "options": {
+          "timeout": 20000
+        },
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ machine: $fromAI('machine', `Nom de la machine`, 'string'), commandes: $fromAI('commandes', `Commandes exactes, une par ligne`, 'string'), explication: $fromAI('explication', `Pourquoi cette action, en francais simple`, 'string'), risques: $fromAI('risques', `Ce qui pourrait mal se passer`, 'string'), retour_arriere: $fromAI('retour_arriere', `Comment annuler si besoin`, 'string') }) }}"
+      },
+      "id": "outil-infra_ssh_demande_action",
+      "name": "infra_ssh_demande_action",
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.2,
+      "position": [
+        1400,
+        300
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "majCredJarvisSsh1",
+          "name": "Majordome - jarvis-ssh"
+        }
+      }
     }
   ],
   "connections": {
@@ -366,6 +424,28 @@
       ]
     },
     "films_demande": {
+      "ai_tool": [
+        [
+          {
+            "node": "MCP Server Trigger",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "infra_ssh_lecture": {
+      "ai_tool": [
+        [
+          {
+            "node": "MCP Server Trigger",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "infra_ssh_demande_action": {
       "ai_tool": [
         [
           {

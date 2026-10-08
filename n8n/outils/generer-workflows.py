@@ -19,6 +19,7 @@ CRED = {
     "seerr": {"id": "majCredSeerrApi01", "name": "Majordome - Seerr", "type": "httpHeaderAuth"},
     "paperless": {"id": "majCredPaperless1", "name": "Majordome - Paperless (lecture)", "type": "httpHeaderAuth"},
     "hooks": {"id": "majCredOcHooks001", "name": "Majordome - hooks OpenClaw", "type": "httpBearerAuth"},
+    "jarvis": {"id": "majCredJarvisSsh1", "name": "Majordome - jarvis-ssh", "type": "httpHeaderAuth"},
 }
 
 
@@ -174,6 +175,40 @@ outils = [
         corps="={{ JSON.stringify({ mediaType: $fromAI('mediaType', `movie ou tv`, 'string'), "
               "mediaId: $fromAI('mediaId', `Identifiant TMDB renvoye par films_recherche`, 'number'), "
               "seasons: $fromAI('mediaType', `movie ou tv`, 'string') === 'tv' ? 'all' : undefined }) }}",
+    ),
+]
+MACHINES = ("ml150 (hyperviseur Proxmox), srv-nas (NAS ZFS, Jellyfin), nextcloud, immich, "
+            "docker (NPM, n8n, Vaultwarden, Paperless...), srv-web, frigate, monitoring "
+            "(Prometheus/Grafana), authentik")
+outils += [
+    outil_http(
+        "infra_ssh_lecture", [1200, 300],
+        "Lit l'etat d'une machine de l'infra en SSH (diagnostic uniquement, aucune modification). "
+        f"Machines : {MACHINES}. Commandes autorisees : uptime, hostname, uname -a, lsblk, sensors, "
+        "free -h, df -h [chemin], ip -br a, cat /etc/os-release|/proc/loadavg|/proc/mdstat, "
+        "systemctl --failed, systemctl status|is-active|is-enabled <unite>, "
+        "journalctl -u <unite> -n <N> | journalctl -p err -n <N> | journalctl -b 0 -n <N>, "
+        "docker ps [-a], docker stats, docker logs --tail <N> <conteneur>, docker compose ls, "
+        "zpool status|list [pool], zfs list, qm|pct list, qm|pct status|config <id>, pvesm status, "
+        "apt list --upgradable, smartctl -H|-A /dev/sdX, aide. Pas de ; | & $ ni guillemets.",
+        "POST", "@@JARVIS_SSH_URL@@/lecture", cle_cred="jarvis",
+        corps="={{ JSON.stringify({ machine: $fromAI('machine', `Nom de la machine`, 'string'), "
+              "commande: $fromAI('commande', `Commande de lecture autorisee`, 'string') }) }}",
+    ),
+    outil_http(
+        "infra_ssh_demande_action", [1400, 300],
+        "Demande a Louis l'autorisation d'executer des commandes qui MODIFIENT une machine "
+        f"({MACHINES}). Rien n'est execute tant que Louis n'a pas valide lui-meme dans Talk ; "
+        "tu seras prevenu du resultat. Les commandes s'executent telles quelles, en root, une par "
+        "ligne, arret a la premiere erreur. Explique clairement le pourquoi, les risques et le "
+        "retour arriere. Interdit d'office : tout ce qui couperait la VM de Jarvis (106), la VM "
+        "Docker (102), n8n, NPM ou l'hyperviseur.",
+        "POST", "@@JARVIS_SSH_URL@@/demande", cle_cred="jarvis",
+        corps="={{ JSON.stringify({ machine: $fromAI('machine', `Nom de la machine`, 'string'), "
+              "commandes: $fromAI('commandes', `Commandes exactes, une par ligne`, 'string'), "
+              "explication: $fromAI('explication', `Pourquoi cette action, en francais simple`, 'string'), "
+              "risques: $fromAI('risques', `Ce qui pourrait mal se passer`, 'string'), "
+              "retour_arriere: $fromAI('retour_arriere', `Comment annuler si besoin`, 'string') }) }}",
     ),
 ]
 outils_wf = serveur_mcp(
