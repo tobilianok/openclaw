@@ -232,10 +232,16 @@ class Routeur:
             if k in corps:
                 a_plat[k] = corps[k]
         deja = {route1.fournisseur}
+        routes_prises = {route1.nom}
         taches, choisies = [], []
+        tokens = estimer_tokens(a_plat)
         for profil in membres:
-            for r in self.candidates(profil, estimer_tokens(a_plat), deja):
+            # D'abord un autre fournisseur ; a defaut, un autre modele.
+            options = self.candidates(profil, tokens, deja) or [
+                r for r in self.candidates(profil, tokens) if r.nom not in routes_prises]
+            for r in options:
                 deja.add(r.fournisseur)
+                routes_prises.add(r.nom)
                 choisies.append(r)
                 taches.append(self.appeler(r.nom, a_plat))
                 break

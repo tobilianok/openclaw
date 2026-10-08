@@ -42,8 +42,12 @@ routes:
   mistral-medium: {fournisseur: mistral, modele: mistral-medium-latest, contexte: 128000, rpm: 50, tpm: 400000}
   mistral-magistral: {fournisseur: mistral, modele: magistral-medium-latest, contexte: 40000, rpm: 50, tpm: 400000}
   # mistral-large-latest n'est pas inclus dans le plan gratuit Experiment.
-  nvidia-gptoss:  {fournisseur: nvidia, modele: openai/gpt-oss-120b, contexte: 120000, rpm: 35, rpd: 9000}
+  # NVIDIA NIM (verifie le 08/10, appels d'outils OK ; gpt-oss-120b y est retire)
+  nvidia-glm:     {fournisseur: nvidia, modele: z-ai/glm-5.3, contexte: 120000, rpm: 35, rpd: 9000}
   nvidia-nemotron: {fournisseur: nvidia, modele: nvidia/nemotron-3-super-120b-a12b, contexte: 120000, rpm: 35, rpd: 9000}
+  nvidia-nemotron-ultra: {fournisseur: nvidia, modele: nvidia/nemotron-3-ultra-550b-a55b, contexte: 120000, rpm: 35, rpd: 9000}
+  nvidia-kimi:    {fournisseur: nvidia, modele: moonshotai/kimi-k3, contexte: 120000, rpm: 35, rpd: 9000, delai_s: 150}
+  nvidia-gptoss20: {fournisseur: nvidia, modele: openai/gpt-oss-20b, contexte: 120000, rpm: 35, rpd: 9000}
   # Groq gratuit : 1000 requetes/jour et 8000 tokens/minute par modele (verifie le 08/10)
   groq-gptoss-120b: {fournisseur: groq, modele: openai/gpt-oss-120b, contexte: 7000, rpm: 25, tpm: 7500, rpd: 950}
   groq-gptoss:    {fournisseur: groq, modele: openai/gpt-oss-20b, contexte: 7000, rpm: 25, tpm: 7500, rpd: 950}
@@ -53,11 +57,11 @@ routes:
 # --- Profils : ce que OpenClaw demande, et dans quel ordre essayer -----------
 profils:
   # Conversation et outils (le majordome au quotidien)
-  auto: [gemini-flash, gemini-flash-3, mistral-medium, nvidia-gptoss, mistral-small, openrouter-gptoss]
+  auto: [gemini-flash, nvidia-glm, nvidia-nemotron, gemini-flash-3, mistral-medium, mistral-small, openrouter-gptoss]
   # Briefing, bilan, analyses : les meilleurs modeles d'abord
-  reflexion: [gemini-recent, mistral-magistral, nvidia-nemotron, gemini-flash, mistral-medium, gemini-flash-3]
+  reflexion: [nvidia-kimi, nvidia-nemotron-ultra, gemini-recent, nvidia-glm, gemini-flash, mistral-magistral, mistral-medium]
   # Petites taches sans outils : les plus rapides d'abord
-  rapide: [groq-gptoss-120b, groq-gptoss, github-mini, gemini-lite, mistral-small]
+  rapide: [groq-gptoss-120b, groq-gptoss, nvidia-gptoss20, github-mini, gemini-lite, mistral-small]
 
 # Pause d'une route apres un refus sans indication de duree (secondes)
 pause_apres_refus_s: 60

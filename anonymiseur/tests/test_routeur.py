@@ -154,3 +154,15 @@ def test_aplatir_les_appels_d_outils():
     a = aplatir(msgs)
     assert [m["role"] for m in a] == ["system", "user", "assistant", "user"]
     assert "agenda" in a[2]["content"] and "RDV 10h" in a[3]["content"]
+
+
+def test_conseil_meme_fournisseur_si_pas_d_autre(faux, monkeypatch):
+    monkeypatch.delenv("CLE_B")
+    monkeypatch.delenv("CLE_C")
+    cfg = config()
+    cfg["routes"]["a2"] = {"fournisseur": "a", "modele": "ma2"}
+    cfg["profils"] = {"auto": ["a1", "a2"], "reflexion": ["a2", "a1"]}
+    r = Routeur(cfg, httpx.AsyncClient(transport=httpx.MockTransport(faux)))
+    premiere, route1 = lancer(r.appeler("auto", CORPS))
+    rep, nom = lancer(r.conseil(CORPS, premiere, route1, ["reflexion", "auto"], "reflexion"))
+    assert nom.startswith("conseil[a1+a2]") and rep["choices"][0]["message"]["content"].startswith("SYNTHESE")
