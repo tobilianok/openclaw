@@ -39,6 +39,18 @@ CARACTERES_LECTURE = re.compile(r"^[A-Za-z0-9 ._/@:=,+-]{1,400}$")
 DEPOT_GITHUB = re.compile(r"^[A-Za-z0-9_.-]{1,40}/[A-Za-z0-9_.-]{1,100}$")
 
 
+MAX_RETOUR = 8000  # caracteres de lecture renvoyes a Jarvis : son contexte est limite
+
+
+def raccourcir(texte: str, maximum: int = MAX_RETOUR) -> str:
+    """Garde le debut et la fin d'une sortie trop longue."""
+    if len(texte) <= maximum:
+        return texte
+    debut, fin = texte[: maximum * 3 // 4], texte[-maximum // 4:]
+    return (f"{debut}\n[... {len(texte) - maximum} caracteres coupes : affine la commande "
+            f"(grep, head, tail -n, chemin plus precis) ...]\n{fin}")
+
+
 def _version(tag: str) -> tuple:
     """'v3.2.2' -> (3, 2, 2), pour comparer des versions."""
     return tuple(int(x) for x in re.findall(r"\d+", tag)[:4])
@@ -226,6 +238,7 @@ def creer_app(config: dict | None = None, executeur: Executeur | None = None,
             return {"code": 126, "sortie": "REFUSE : commande vide, trop longue ou avec des caracteres interdits "
                                            "(pas de ; | & $ ` < > guillemets). Tape 'aide' pour la liste."}
         code, sortie = await executeur.lancer("lecture", m["hote"], commande, delai=40)
+        sortie = raccourcir(sortie)
         log.info("lecture %s : %s -> %s", corps.get("machine"), commande, code)
         return {"machine": corps.get("machine"), "commande": commande, "code": code, "sortie": sortie}
 
@@ -250,9 +263,9 @@ def creer_app(config: dict | None = None, executeur: Executeur | None = None,
             cible = _version(depuis)
             versions = [v for v in versions if _version(v.get("tag_name", "")) > cible]
         versions = versions[:8]
-        budget, sortie = 24000, []
+        budget, sortie = 10000, []
         for v in reversed(versions):  # de la plus ancienne a la plus recente
-            texte = (v.get("body") or "")[: max(1500, budget // max(1, len(versions)))]
+            texte = (v.get("body") or "")[: max(800, budget // max(1, len(versions)))]
             sortie.append({"version": v.get("tag_name"), "date": (v.get("published_at") or "")[:10],
                            "notes": texte})
         return {"depot": depot, "depuis": depuis or None, "derniere": versions[0]["tag_name"] if versions else None,

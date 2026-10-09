@@ -266,3 +266,11 @@ def test_lecture_large_secrets_masques(env):
     assert r["code"] == 0 and "v3.2.2" in r["sortie"] and "supersecret" not in r["sortie"], r
     assert lire(client, "srv-nas", "ls -la /tmp/jarvis-stack")["code"] == 0
     assert "REFUSE" in lire(client, "srv-nas", "cat /etc/ssh/ssh_host_ed25519_key")["sortie"]
+
+
+def test_raccourcir():
+    from app.service import raccourcir
+    t = "a" * 5000 + "b" * 10000 + "z" * 100
+    r = raccourcir(t, 8000)
+    assert len(r) < 8200 and r.startswith("a") and r.endswith("z") and "coupes" in r
+    assert raccourcir("court") == "court"

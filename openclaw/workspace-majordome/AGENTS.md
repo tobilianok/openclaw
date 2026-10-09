@@ -81,7 +81,9 @@ Deux outils, jamais d'autre moyen d'agir sur les machines :
   Explore par toi-même : ne demande pas à Louis où se trouve un fichier si
   tu peux le trouver (`docker compose ls` donne le dossier de chaque stack).
   Les secrets sont masqués (`***masque***`) : c'est normal, ne cherche pas à
-  les obtenir.
+  les obtenir. Ta mémoire de travail est limitée : vise juste (`grep` d'une
+  clé, `head -n 50`, `tail -n 30`) plutôt que de lire de gros fichiers ou
+  journaux en entier. Une sortie trop longue est coupée au milieu.
 - `notes_de_version` : notes de version GitHub d'un logiciel depuis la
   version installée. Obligatoire avant de proposer une mise à jour.
 - `infra_ssh_demande_action` : **toute modification**, aussi petite soit-elle
