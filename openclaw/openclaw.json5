@@ -28,13 +28,14 @@
         apiKey: "${ANONYMISEUR_TOKEN}",
         api: "openai-completions",
         timeoutSeconds: 180,
-        // Profils du routeur (voir anonymiseur/config.yaml). contextTokens est
-        // volontairement bas : les offres gratuites limitent les tokens par
-        // minute, et des requetes plus petites passent chez plus de fournisseurs.
+        // Profils du routeur (voir anonymiseur/config.yaml). contextTokens :
+        // les regles, outils et fiches de Jarvis pesent deja ~40k tokens ; a
+        // 48k, une seule lecture SSH faisait deborder la session. 96k tient
+        // chez les routes principales (NVIDIA 120k, Gemini 1M).
         models: [
-          { id: "auto", name: "Majordome (IA gratuites anonymisees)", reasoning: false, input: ["text"], contextWindow: 128000, contextTokens: 48000, maxTokens: 8192 },
-          { id: "reflexion", name: "Majordome - reflexion", reasoning: false, input: ["text"], contextWindow: 128000, contextTokens: 48000, maxTokens: 8192 },
-          { id: "conseil", name: "Majordome - conseil de 3 IA", reasoning: false, input: ["text"], contextWindow: 128000, contextTokens: 48000, maxTokens: 8192 },
+          { id: "auto", name: "Majordome (IA gratuites anonymisees)", reasoning: false, input: ["text"], contextWindow: 120000, contextTokens: 96000, maxTokens: 8192 },
+          { id: "reflexion", name: "Majordome - reflexion", reasoning: false, input: ["text"], contextWindow: 120000, contextTokens: 96000, maxTokens: 8192 },
+          { id: "conseil", name: "Majordome - conseil de 3 IA", reasoning: false, input: ["text"], contextWindow: 120000, contextTokens: 96000, maxTokens: 8192 },
         ],
       },
     },
